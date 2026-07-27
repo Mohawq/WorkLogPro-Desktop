@@ -3,54 +3,100 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Work Time Tracker</title>
+    <title>WorkLog Pro - Time & Expense Tracker</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
+    <!-- Inter Font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <style>
-      .pulse-subtle {
-        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      body {
+        font-family: "Inter", sans-serif;
       }
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(0.95);
+          opacity: 0.8;
         }
         50% {
-          opacity: 0.7;
+          transform: scale(1.05);
+          opacity: 1;
         }
+        100% {
+          transform: scale(0.95);
+          opacity: 0.8;
+        }
+      }
+      .pulse-subtle {
+        animation: pulse-ring 2s infinite ease-in-out;
       }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
-    <!-- Header -->
-    <header class="bg-slate-900 text-white shadow-md">
+  <body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white shadow-md border-b border-slate-800">
       <div
-        class="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4"
+        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4"
       >
-        <div class="flex items-center space-x-3">
-          <div class="bg-indigo-600 p-2.5 rounded-lg text-white">
-            <i class="fa-solid font-bold fa-clock text-xl"></i>
+        <div class="flex items-center gap-3">
+          <div
+            class="bg-indigo-600/30 p-2.5 rounded-xl backdrop-blur-sm border border-indigo-500/30"
+          >
+            <i class="fa-solid fa-clock text-2xl text-indigo-400"></i>
           </div>
           <div>
-            <h1 class="text-xl font-bold leading-tight">WorkLog Pro</h1>
-            <p class="text-xs text-slate-400">Employee Time & Break Tracker</p>
+            <h1 class="text-xl font-bold tracking-tight text-white">
+              WorkLog Pro
+            </h1>
+            <p class="text-xs text-slate-400">
+              Time Card & Expense Management System
+            </p>
           </div>
         </div>
-        <div
-          class="flex items-center gap-4 text-sm bg-slate-800 px-4 py-2 rounded-xl border border-slate-700"
-        >
-          <div class="text-right">
-            <div
-              id="liveClock"
-              class="font-mono font-bold text-lg text-indigo-400"
-            >
-              00:00:00 AM
-            </div>
-            <div id="liveDate" class="text-xs text-slate-400">
-              Loading date...
+
+        <div class="flex items-center gap-3">
+          <!-- Backup & Restore Buttons in Header -->
+          <button
+            onclick="exportData()"
+            title="Backup data to file"
+            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center gap-2"
+          >
+            <i class="fa-solid fa-download text-indigo-400"></i> Backup Data
+          </button>
+          <label
+            title="Restore data from backup file"
+            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-2"
+          >
+            <i class="fa-solid fa-upload text-emerald-400"></i> Restore Data
+            <input
+              type="file"
+              id="importFileInput"
+              accept=".json"
+              onchange="importData(event)"
+              class="hidden"
+            />
+          </label>
+
+          <div
+            class="flex items-center gap-4 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 ml-2"
+          >
+            <div class="text-right">
+              <div
+                id="liveClock"
+                class="text-lg font-bold font-mono tracking-wider text-indigo-300"
+              >
+                00:00:00 AM
+              </div>
+              <div id="liveDate" class="text-xs text-slate-400">
+                Monday, Jan 1
+              </div>
             </div>
           </div>
         </div>
@@ -59,49 +105,51 @@
 
     <!-- Main Container -->
     <main
-      class="max-w-5xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8"
+      class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8"
     >
-      <!-- Left Column: Clock & Actions -->
-      <section class="lg:col-span-1 space-y-6">
-        <!-- Current Status Card -->
-        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <h2
-            class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"
+      <!-- Left Column: Shift Controller & Settings -->
+      <section class="space-y-6">
+        <!-- Clock Control Card -->
+        <div
+          class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-5"
+        >
+          <div
+            class="flex justify-between items-center border-b border-slate-100 pb-4"
           >
-            Current Status
-          </h2>
+            <h2 class="text-base font-bold text-slate-800">Shift Tracker</h2>
+            <span
+              id="shiftTimer"
+              class="font-mono text-sm font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg"
+              >00h 00m 00s</span
+            >
+          </div>
 
           <!-- Status Badge -->
           <div
             id="statusBadge"
-            class="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-100 text-slate-600 font-medium text-base mb-6 transition-all duration-300"
+            class="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-100 text-slate-600 font-medium text-sm"
           >
-            <span class="w-3 h-3 rounded-full bg-slate-400"></span>
-            <span>Clocked Out</span>
+            <span class="w-3 h-3 rounded-full bg-slate-400"></span> Current
+            Status: <strong>Clocked Out</strong>
           </div>
 
-          <!-- Active Timers Info -->
-          <div
-            id="timerDisplay"
-            class="hidden text-center mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100"
-          >
+          <div id="timerDisplay" class="text-center py-2 hidden">
             <div
-              class="text-xs text-slate-500 font-medium mb-1"
-              id="timerLabel"
+              class="text-xs text-slate-400 uppercase tracking-wider font-semibold"
             >
-              Current Shift Duration
+              Active Shift Duration
             </div>
             <div
-              class="text-3xl font-mono font-bold text-slate-800"
-              id="timerValue"
+              id="activeDuration"
+              class="text-3xl font-extrabold font-mono text-slate-800 mt-1"
             >
               00:00:00
             </div>
             <div
               id="breakDurationSub"
-              class="text-xs text-amber-600 font-medium mt-1 hidden"
+              class="text-xs text-amber-600 mt-1 hidden font-medium"
             >
-              Break: <span id="breakSubValue">00:00:00</span>
+              Break time: <span id="breakDurationText">00:00</span>
             </div>
           </div>
 
@@ -110,7 +158,7 @@
             <button
               id="clockInBtn"
               onclick="clockIn()"
-              class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-base"
+              class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-base"
             >
               <i class="fa-solid fa-play"></i> Clock In
             </button>
@@ -192,61 +240,82 @@
           </div>
         </div>
 
-        <!-- Manual Entry Toggle Button -->
-        <button
-          onclick="toggleManualEntryModal()"
-          class="w-full py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-xl transition text-sm flex items-center justify-center gap-2"
-        >
-          <i class="fa-solid fa-pen-to-square"></i> Add Past Entry
-        </button>
+        <!-- Action Buttons Grid -->
+        <div class="grid grid-cols-2 gap-3">
+          <button
+            onclick="toggleManualEntryModal()"
+            class="w-full py-2.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-xl transition text-xs sm:text-sm flex items-center justify-center gap-2"
+          >
+            <i class="fa-solid fa-pen-to-square"></i> Add Past Entry
+          </button>
+          <button
+            onclick="toggleExpenseModal()"
+            class="w-full py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium rounded-xl border border-indigo-200 transition text-xs sm:text-sm flex items-center justify-center gap-2"
+          >
+            <i class="fa-solid fa-file-invoice-dollar"></i> Add Expense/Bill
+          </button>
+        </div>
       </section>
 
       <!-- Right Column: Shift History & Summaries -->
       <section class="lg:col-span-2 space-y-6">
         <!-- Today's Stats Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <div
-            class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
+            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm"
           >
             <div class="text-xs font-medium text-slate-400 uppercase">
               Worked Hours
             </div>
             <div
               id="statWorkedHours"
-              class="text-2xl font-bold text-slate-800 mt-1"
+              class="text-xl sm:text-2xl font-bold text-slate-800 mt-1"
             >
               0.00 hrs
             </div>
           </div>
           <div
-            class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
+            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm"
           >
             <div class="text-xs font-medium text-slate-400 uppercase">
-              Total Break
-            </div>
-            <div
-              id="statBreakHours"
-              class="text-2xl font-bold text-amber-600 mt-1"
-            >
-              0.00 hrs
-            </div>
-          </div>
-          <div
-            class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
-          >
-            <div class="text-xs font-medium text-slate-400 uppercase">
-              Est. Earnings
+              Work Earnings
             </div>
             <div
               id="statEarnings"
-              class="text-2xl font-bold text-emerald-600 mt-1"
+              class="text-xl sm:text-2xl font-bold text-emerald-600 mt-1"
+            >
+              $0.00
+            </div>
+          </div>
+          <div
+            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm"
+          >
+            <div class="text-xs font-medium text-slate-400 uppercase">
+              Expenses / Bills
+            </div>
+            <div
+              id="statExpenses"
+              class="text-xl sm:text-2xl font-bold text-purple-600 mt-1"
+            >
+              $0.00
+            </div>
+          </div>
+          <div
+            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm bg-indigo-50/50 border-indigo-100"
+          >
+            <div class="text-xs font-semibold text-indigo-500 uppercase">
+              Total Payout Due
+            </div>
+            <div
+              id="statTotalPayout"
+              class="text-xl sm:text-2xl font-extrabold text-indigo-700 mt-1"
             >
               $0.00
             </div>
           </div>
         </div>
 
-        <!-- History Logs -->
+        <!-- Shift History Logs Table -->
         <div
           class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
         >
@@ -258,26 +327,11 @@
                 Time Card History
               </h2>
               <p class="text-xs text-slate-400">
-                Overview of all tracked work sessions
+                Logged work shifts and break records
               </p>
-            </div>
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <button
-                onclick="exportCSV()"
-                class="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-xl transition flex items-center gap-1.5"
-              >
-                <i class="fa-solid fa-file-csv"></i> Export CSV
-              </button>
-              <button
-                onclick="clearHistory()"
-                class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium text-xs rounded-xl transition flex items-center gap-1.5"
-              >
-                <i class="fa-solid fa-trash-can"></i> Clear All
-              </button>
             </div>
           </div>
 
-          <!-- Table Container -->
           <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
               <thead
@@ -309,12 +363,57 @@
             </p>
           </div>
         </div>
+
+        <!-- Expenses & Invoices History Table -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+        >
+          <div
+            class="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+          >
+            <div>
+              <h2 class="text-lg font-bold text-slate-800">
+                Reimbursable Expenses & Invoices
+              </h2>
+              <p class="text-xs text-slate-400">
+                Out-of-pocket payments and attached receipts/bills
+              </p>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+              <thead
+                class="bg-slate-50 text-slate-400 text-xs uppercase border-b border-slate-100"
+              >
+                <tr>
+                  <th class="px-6 py-3 font-semibold">Date</th>
+                  <th class="px-6 py-3 font-semibold">Title / Description</th>
+                  <th class="px-6 py-3 font-semibold">Category</th>
+                  <th class="px-6 py-3 font-semibold">Amount</th>
+                  <th class="px-6 py-3 font-semibold">Receipt / Attachment</th>
+                  <th class="px-6 py-3 font-semibold text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="expensesTableBody" class="divide-y divide-slate-100">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <div id="emptyExpensesState" class="p-8 text-center text-slate-400">
+            <i class="fa-solid fa-receipt text-3xl mb-2 text-slate-300"></i>
+            <p class="text-sm font-medium">
+              No expense records or bills added yet.
+            </p>
+          </div>
+        </div>
       </section>
     </main>
 
-    <!-- Manual Entry Modal -->
+    <!-- Manual Entry / Edit Modal -->
     <div
-      id="manualModal"
+      id="manualEntryModal"
       class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
     >
       <div
@@ -324,7 +423,7 @@
           class="flex justify-between items-center border-b border-slate-100 pb-3"
         >
           <h3 id="modalTitle" class="text-lg font-bold text-slate-800">
-            Add Manual Work Entry
+            Add Past Work Entry
           </h3>
           <button
             onclick="toggleManualEntryModal()"
@@ -357,7 +456,7 @@
               >
               <input
                 type="time"
-                id="mStartTime"
+                id="mStart"
                 required
                 class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
@@ -368,32 +467,46 @@
               >
               <input
                 type="time"
-                id="mEndTime"
+                id="mEnd"
                 required
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Break Duration (mins)</label
+              >
+              <input
+                type="number"
+                id="mBreak"
+                min="0"
+                value="0"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Hourly Rate ($)</label
+              >
+              <input
+                type="number"
+                id="mRate"
+                step="0.50"
+                min="0"
                 class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-700 mb-1"
-              >Total Break (Minutes)</label
-            >
-            <input
-              type="number"
-              id="mBreakMins"
-              min="0"
-              value="0"
-              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1"
-              >Notes / Description</label
+              >Shift Notes</label
             >
             <input
               type="text"
               id="mNotes"
-              placeholder="Optional notes"
+              placeholder="Optional notes or job details"
               class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
@@ -408,7 +521,6 @@
             </button>
             <button
               type="submit"
-              id="modalSubmitBtn"
               class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
             >
               Save Entry
@@ -418,29 +530,194 @@
       </div>
     </div>
 
-    <!-- Application Logic -->
+    <!-- Expense Modal -->
+    <div
+      id="expenseModal"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+    >
+      <div
+        class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4"
+      >
+        <div
+          class="flex justify-between items-center border-b border-slate-100 pb-3"
+        >
+          <h3 class="text-lg font-bold text-slate-800">
+            Add Reimbursable Expense / Bill
+          </h3>
+          <button
+            onclick="toggleExpenseModal()"
+            class="text-slate-400 hover:text-slate-600 text-lg"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <form
+          id="expenseForm"
+          onsubmit="handleExpenseSubmit(event)"
+          class="space-y-4"
+        >
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Date</label
+            >
+            <input
+              type="date"
+              id="eDate"
+              required
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Expense Title / Item</label
+            >
+            <input
+              type="text"
+              id="eTitle"
+              required
+              placeholder="e.g., Office Supplies, Fuel, Software Subscription"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Amount ($)</label
+              >
+              <input
+                type="number"
+                id="eAmount"
+                step="0.01"
+                min="0.01"
+                required
+                placeholder="0.00"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Category</label
+              >
+              <select
+                id="eCategory"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              >
+                <option value="Supplies">Supplies</option>
+                <option value="Travel/Fuel">Travel / Fuel</option>
+                <option value="Meals/Clients">Meals / Clients</option>
+                <option value="Software/Services">Software / Services</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Attach Receipt / Invoice (PDF, PNG, JPG...)</label
+            >
+            <input
+              type="file"
+              id="eFile"
+              accept="image/*,.pdf,.doc,.docx"
+              class="w-full px-3 py-1.5 border border-slate-300 rounded-xl text-xs text-slate-600 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+            />
+            <p class="text-[11px] text-slate-400 mt-1">
+              Supports image files, PDF documents, or receipts.
+            </p>
+          </div>
+
+          <div class="flex gap-3 pt-2">
+            <button
+              type="button"
+              onclick="toggleExpenseModal()"
+              class="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+            >
+              Save Expense
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- File Viewer Modal -->
+    <div
+      id="fileViewerModal"
+      class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+    >
+      <div
+        class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] flex flex-col"
+      >
+        <div
+          class="flex justify-between items-center border-b border-slate-100 pb-3"
+        >
+          <h3
+            id="fileViewerTitle"
+            class="text-base font-bold text-slate-800 truncate"
+          >
+            Attachment Preview
+          </h3>
+          <button
+            onclick="closeFileViewer()"
+            class="text-slate-400 hover:text-slate-600 text-lg"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div
+          id="fileViewerContent"
+          class="flex-1 overflow-auto flex items-center justify-center min-h-[250px] bg-slate-50 rounded-xl p-2 border border-slate-200"
+        >
+          <!-- Injected preview -->
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <a
+            id="fileDownloadBtn"
+            download=""
+            href="#"
+            class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2"
+          >
+            <i class="fa-solid fa-download"></i> Download File
+          </a>
+          <button
+            onclick="closeFileViewer()"
+            class="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-xl transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Application JavaScript Logic -->
     <script>
       // State Variables
       let currentShift = null; // { startTime, breakStart, totalBreakMs, notes }
       let logs = [];
+      let expenses = [];
       let hourlyRate = 20.0;
       let timerInterval = null;
       let editingLogId = null;
 
-      // Load persisted state on start
+      // Load persisted state on startup
       window.addEventListener("DOMContentLoaded", () => {
         loadStoredData();
         updateClock();
         setInterval(updateClock, 1000);
         renderUI();
 
-        // Set default date for manual entry modal
-        document.getElementById("mDate").value = new Date()
-          .toISOString()
-          .split("T")[0];
+        // Set default dates in inputs
+        const today = new Date().toISOString().split("T")[0];
+        document.getElementById("mDate").value = today;
+        document.getElementById("eDate").value = today;
       });
 
-      // Live Date Clock
+      // Update live header clock
       function updateClock() {
         const now = new Date();
         document.getElementById("liveClock").textContent =
@@ -451,110 +728,10 @@
           });
         document.getElementById("liveDate").textContent =
           now.toLocaleDateString([], {
-            weekday: "short",
+            weekday: "long",
             month: "short",
             day: "numeric",
-            year: "numeric",
           });
-
-        if (currentShift) {
-          updateTimerDisplay();
-        }
-      }
-
-      // Clock In Action
-      function clockIn() {
-        if (currentShift) return;
-
-        currentShift = {
-          id: Date.now(),
-          startTime: new Date().toISOString(),
-          breakStart: null,
-          totalBreakMs: 0,
-          notes: document.getElementById("notesInput").value.trim(),
-        };
-
-        saveActiveShift();
-        renderUI();
-        startTimer();
-      }
-
-      // Start Break Action
-      function startBreak() {
-        if (!currentShift || currentShift.breakStart) return;
-
-        currentShift.breakStart = new Date().toISOString();
-        saveActiveShift();
-        renderUI();
-      }
-
-      // End Break Action
-      function endBreak() {
-        if (!currentShift || !currentShift.breakStart) return;
-
-        const breakEndTime = new Date();
-        const breakStartTime = new Date(currentShift.breakStart);
-        const duration = breakEndTime - breakStartTime;
-
-        currentShift.totalBreakMs += duration;
-        currentShift.breakStart = null;
-
-        saveActiveShift();
-        renderUI();
-      }
-
-      // Clock Out Action
-      function clockOut() {
-        if (!currentShift) return;
-
-        // If clocked out while still on break, end break automatically
-        if (currentShift.breakStart) {
-          const breakEndTime = new Date();
-          const breakStartTime = new Date(currentShift.breakStart);
-          currentShift.totalBreakMs += breakEndTime - breakStartTime;
-          currentShift.breakStart = null;
-        }
-
-        const endTime = new Date().toISOString();
-        const start = new Date(currentShift.startTime);
-        const end = new Date(endTime);
-        const grossDurationMs = end - start;
-        const netDurationMs = Math.max(
-          0,
-          grossDurationMs - currentShift.totalBreakMs,
-        );
-
-        const newLog = {
-          id: currentShift.id,
-          date: start.toLocaleDateString(),
-          startTime: start.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          endTime: end.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          rawStartISO: currentShift.startTime,
-          rawEndISO: endTime,
-          breakMs: currentShift.totalBreakMs,
-          netDurationMs: netDurationMs,
-          hourlyRate: hourlyRate,
-          notes:
-            currentShift.notes ||
-            document.getElementById("notesInput").value.trim(),
-        };
-
-        logs.unshift(newLog); // Add to top of array
-        currentShift = null;
-
-        // Clear active shift inputs
-        document.getElementById("notesInput").value = "";
-
-        saveActiveShift();
-        saveLogs();
-        stopTimer();
-        renderUI();
       }
 
       // Render UI state based on currentShift and stored logs
@@ -606,61 +783,119 @@
           clockOutBtn.disabled = false;
 
           timerDisplay.classList.remove("hidden");
+          breakDurationSub.classList.add("hidden");
           startTimer();
         }
 
         renderLogsTable();
+        renderExpensesTable();
         renderStats();
       }
 
-      // Live duration updates
-      function updateTimerDisplay() {
-        if (!currentShift) return;
-
-        const now = new Date();
-        const start = new Date(currentShift.startTime);
-
-        // Calculate active accumulated break time
-        let activeBreakMs = currentShift.totalBreakMs;
-        if (currentShift.breakStart) {
-          activeBreakMs += now - new Date(currentShift.breakStart);
-        }
-
-        const grossDurationMs = now - start;
-        const netDurationMs = Math.max(0, grossDurationMs - activeBreakMs);
-
-        if (currentShift.breakStart) {
-          document.getElementById("timerLabel").textContent =
-            "Current Break Duration";
-          const currentBreakMs = now - new Date(currentShift.breakStart);
-          document.getElementById("timerValue").textContent =
-            formatMsToHMS(currentBreakMs);
-        } else {
-          document.getElementById("timerLabel").textContent =
-            "Working Duration (Net)";
-          document.getElementById("timerValue").textContent =
-            formatMsToHMS(netDurationMs);
-        }
-
-        document.getElementById("breakSubValue").textContent =
-          formatMsToHMS(activeBreakMs);
-      }
-
+      // Live shift timer updates
       function startTimer() {
-        if (!timerInterval) {
-          updateTimerDisplay();
-          timerInterval = setInterval(updateTimerDisplay, 1000);
-        }
+        if (timerInterval) clearInterval(timerInterval);
+        updateTimerDisplay();
+        timerInterval = setInterval(updateTimerDisplay, 1000);
       }
 
       function stopTimer() {
-        if (timerInterval) {
-          clearInterval(timerInterval);
-          timerInterval = null;
+        if (timerInterval) clearInterval(timerInterval);
+        document.getElementById("shiftTimer").textContent = "00h 00m 00s";
+      }
+
+      function updateTimerDisplay() {
+        if (!currentShift) return;
+
+        const now = Date.now();
+        let accumulatedBreak = currentShift.totalBreakMs || 0;
+        if (currentShift.breakStart) {
+          accumulatedBreak += now - currentShift.breakStart;
+        }
+
+        const elapsedMs = Math.max(
+          0,
+          now - currentShift.startTime - accumulatedBreak,
+        );
+        const formatted = formatMs(elapsedMs);
+
+        document.getElementById("activeDuration").textContent = formatted;
+        document.getElementById("shiftTimer").textContent = formatted;
+
+        if (currentShift.breakStart) {
+          const currentBreakMs = accumulatedBreak;
+          document.getElementById("breakDurationText").textContent = formatMs(
+            currentBreakMs,
+            false,
+          );
         }
       }
 
-      // History logs table rendering
+      // Clock actions
+      function clockIn() {
+        currentShift = {
+          startTime: Date.now(),
+          breakStart: null,
+          totalBreakMs: 0,
+          notes: document.getElementById("notesInput").value.trim(),
+        };
+        saveShift();
+        renderUI();
+      }
+
+      function startBreak() {
+        if (!currentShift || currentShift.breakStart) return;
+        currentShift.breakStart = Date.now();
+        saveShift();
+        renderUI();
+      }
+
+      function endBreak() {
+        if (!currentShift || !currentShift.breakStart) return;
+        const breakDuration = Date.now() - currentShift.breakStart;
+        currentShift.totalBreakMs =
+          (currentShift.totalBreakMs || 0) + breakDuration;
+        currentShift.breakStart = null;
+        saveShift();
+        renderUI();
+      }
+
+      function clockOut() {
+        if (!currentShift) return;
+
+        const now = Date.now();
+        let totalBreak = currentShift.totalBreakMs || 0;
+        if (currentShift.breakStart) {
+          totalBreak += now - currentShift.breakStart;
+        }
+
+        const grossDuration = now - currentShift.startTime;
+        const netDuration = Math.max(0, grossDuration - totalBreak);
+
+        const newLog = {
+          id: Date.now(),
+          date: new Date(currentShift.startTime).toLocaleDateString(),
+          startTimeISO: new Date(currentShift.startTime).toISOString(),
+          endTimeISO: new Date(now).toISOString(),
+          breakMs: totalBreak,
+          netDurationMs: netDuration,
+          hourlyRate: hourlyRate,
+          notes:
+            document.getElementById("notesInput").value.trim() ||
+            currentShift.notes ||
+            "Normal Shift",
+        };
+
+        logs.unshift(newLog);
+        currentShift = null;
+        document.getElementById("notesInput").value = "";
+
+        saveShift();
+        saveLogs();
+        renderUI();
+      }
+
+      // Render shift logs table
       function renderLogsTable() {
         const tbody = document.getElementById("logsTableBody");
         const emptyState = document.getElementById("emptyState");
@@ -675,34 +910,258 @@
         emptyState.classList.add("hidden");
 
         logs.forEach((log) => {
-          const netHours = log.netDurationMs / (1000 * 60 * 60);
+          const startObj = new Date(log.startTimeISO);
+          const endObj = new Date(log.endTimeISO);
+
+          const startTimeStr = startObj.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const endTimeStr = endObj.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          const netHours = (log.netDurationMs / (1000 * 60 * 60)).toFixed(2);
           const breakMins = Math.round(log.breakMs / (1000 * 60));
-          const pay = netHours * (log.hourlyRate || hourlyRate);
+          const pay = (netHours * (log.hourlyRate || hourlyRate)).toFixed(2);
 
           const tr = document.createElement("tr");
           tr.className = "hover:bg-slate-50/80 transition";
           tr.innerHTML = `
-                    <td class="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">
-                        ${log.date}
-                        ${log.notes ? `<div class="text-xs text-slate-400 font-normal mt-0.5">${escapeHtml(log.notes)}</div>` : ""}
+                    <td class="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">${log.date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="font-medium text-slate-700">${startTimeStr} - ${endTimeStr}</div>
+                        <div class="text-xs text-slate-400">${escapeHtml(log.notes)}</div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-slate-600">
-                        ${log.startTime} - ${log.endTime}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-slate-600">
-                        ${breakMins > 0 ? `<span class="text-amber-600 font-medium">${breakMins} mins</span>` : '<span class="text-slate-300">None</span>'}
-                    </td>
-                    <td class="px-6 py-4 font-semibold text-slate-800 whitespace-nowrap">
-                        ${netHours.toFixed(2)} hrs
-                    </td>
-                    <td class="px-6 py-4 font-semibold text-emerald-600 whitespace-nowrap">
-                        $${pay.toFixed(2)}
-                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 py-1 text-xs rounded-lg font-medium bg-amber-50 text-amber-700 border border-amber-200">${breakMins} mins</span></td>
+                    <td class="px-6 py-4 font-semibold text-slate-800 whitespace-nowrap">${netHours} hrs</td>
+                    <td class="px-6 py-4 font-semibold text-emerald-600 whitespace-nowrap">$${pay}</td>
                     <td class="px-6 py-4 text-right whitespace-nowrap">
-                        <button onclick="editLog(${log.id})" class="text-slate-400 hover:text-indigo-600 transition px-2 py-1 mr-1" title="Edit Entry">
-                            <i class="fa-solid fa-pen-to-square"></i>
+                        <div class="flex items-center justify-end gap-1">
+                            <button onclick="editLog(${log.id})" class="text-slate-400 hover:text-indigo-600 transition px-2 py-1" title="Edit Entry">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button onclick="deleteLog(${log.id})" class="text-slate-400 hover:text-rose-600 transition px-2 py-1" title="Delete Entry">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Manual Shift Add/Edit Modal
+      function toggleManualEntryModal() {
+        const modal = document.getElementById("manualEntryModal");
+        const isOpening = modal.classList.contains("hidden");
+        if (isOpening) {
+          editingLogId = null;
+          document.getElementById("modalTitle").textContent =
+            "Add Past Work Entry";
+          document.getElementById("manualForm").reset();
+          document.getElementById("mDate").value = new Date()
+            .toISOString()
+            .split("T")[0];
+          document.getElementById("mRate").value = hourlyRate;
+        }
+        modal.classList.toggle("hidden");
+        modal.classList.toggle("flex");
+      }
+
+      function editLog(id) {
+        const log = logs.find((l) => l.id === id);
+        if (!log) return;
+
+        editingLogId = id;
+        document.getElementById("modalTitle").textContent = "Edit Work Entry";
+
+        const startObj = new Date(log.startTimeISO);
+        const endObj = new Date(log.endTimeISO);
+
+        document.getElementById("mDate").value = startObj
+          .toISOString()
+          .split("T")[0];
+        document.getElementById("mStart").value = startObj
+          .toTimeString()
+          .substring(0, 5);
+        document.getElementById("mEnd").value = endObj
+          .toTimeString()
+          .substring(0, 5);
+        document.getElementById("mBreak").value = Math.round(
+          log.breakMs / (1000 * 60),
+        );
+        document.getElementById("mRate").value = log.hourlyRate || hourlyRate;
+        document.getElementById("mNotes").value = log.notes || "";
+
+        const modal = document.getElementById("manualEntryModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      }
+
+      function handleManualSubmit(e) {
+        e.preventDefault();
+
+        const dateVal = document.getElementById("mDate").value;
+        const startVal = document.getElementById("mStart").value;
+        const endVal = document.getElementById("mEnd").value;
+        const breakMins =
+          parseInt(document.getElementById("mBreak").value) || 0;
+        const rateVal =
+          parseFloat(document.getElementById("mRate").value) || hourlyRate;
+        const notesVal = document.getElementById("mNotes").value.trim();
+
+        if (!dateVal || !startVal || !endVal) return;
+
+        const startISO = new Date(`${dateVal}T${startVal}:00`).toISOString();
+        const endISO = new Date(`${dateVal}T${endVal}:00`).toISOString();
+
+        const startMs = new Date(startISO).getTime();
+        const endMs = new Date(endISO).getTime();
+
+        if (endMs <= startMs) {
+          alert("End time must be after start time.");
+          return;
+        }
+
+        const breakMs = breakMins * 60 * 1000;
+        const grossMs = endMs - startMs;
+        const netMs = Math.max(0, grossMs - breakMs);
+
+        if (editingLogId) {
+          const index = logs.findIndex((l) => l.id === editingLogId);
+          if (index !== -1) {
+            logs[index] = {
+              ...logs[index],
+              date: new Date(startISO).toLocaleDateString(),
+              startTimeISO: startISO,
+              endTimeISO: endISO,
+              breakMs: breakMs,
+              netDurationMs: netMs,
+              hourlyRate: rateVal,
+              notes: notesVal || "Manual Entry",
+            };
+          }
+        } else {
+          const newLog = {
+            id: Date.now(),
+            date: new Date(startISO).toLocaleDateString(),
+            startTimeISO: startISO,
+            endTimeISO: endISO,
+            breakMs: breakMs,
+            netDurationMs: netMs,
+            hourlyRate: rateVal,
+            notes: notesVal || "Manual Entry",
+          };
+          logs.unshift(newLog);
+        }
+
+        saveLogs();
+        renderUI();
+        toggleManualEntryModal();
+      }
+
+      function deleteLog(id) {
+        logs = logs.filter((l) => l.id !== id);
+        saveLogs();
+        renderUI();
+      }
+
+      // Expenses Logic
+      function toggleExpenseModal() {
+        const modal = document.getElementById("expenseModal");
+        const isOpening = modal.classList.contains("hidden");
+        if (isOpening) {
+          document.getElementById("expenseForm").reset();
+          document.getElementById("eDate").value = new Date()
+            .toISOString()
+            .split("T")[0];
+        }
+        modal.classList.toggle("hidden");
+        modal.classList.toggle("flex");
+      }
+
+      function handleExpenseSubmit(e) {
+        e.preventDefault();
+
+        const dateVal = document.getElementById("eDate").value;
+        const titleVal = document.getElementById("eTitle").value.trim();
+        const amountVal =
+          parseFloat(document.getElementById("eAmount").value) || 0;
+        const categoryVal = document.getElementById("eCategory").value;
+        const fileInput = document.getElementById("eFile");
+
+        if (!dateVal || !titleVal || amountVal <= 0) return;
+
+        const newExpense = {
+          id: Date.now(),
+          date: new Date(dateVal + "T00:00:00").toLocaleDateString(),
+          title: titleVal,
+          amount: amountVal,
+          category: categoryVal,
+          fileName: null,
+          fileType: null,
+          fileData: null,
+        };
+
+        if (fileInput.files && fileInput.files[0]) {
+          const file = fileInput.files[0];
+          const reader = new FileReader();
+          reader.onload = function (evt) {
+            newExpense.fileName = file.name;
+            newExpense.fileType = file.type;
+            newExpense.fileData = evt.target.result;
+
+            expenses.unshift(newExpense);
+            saveExpenses();
+            renderUI();
+            toggleExpenseModal();
+          };
+          reader.readAsDataURL(file);
+        } else {
+          expenses.unshift(newExpense);
+          saveExpenses();
+          renderUI();
+          toggleExpenseModal();
+        }
+      }
+
+      function renderExpensesTable() {
+        const tbody = document.getElementById("expensesTableBody");
+        const emptyState = document.getElementById("emptyExpensesState");
+
+        tbody.innerHTML = "";
+
+        if (expenses.length === 0) {
+          emptyState.classList.remove("hidden");
+          return;
+        }
+
+        emptyState.classList.add("hidden");
+
+        expenses.forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.className = "hover:bg-slate-50/80 transition";
+
+          let fileButtonHtml =
+            '<span class="text-slate-300 text-xs">No attachment</span>';
+          if (item.fileData) {
+            fileButtonHtml = `
+                        <button onclick="viewAttachment(${item.id})" class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200 transition">
+                            <i class="fa-solid fa-paperclip"></i> View File
                         </button>
-                        <button onclick="deleteLog(${log.id})" class="text-slate-300 hover:text-rose-600 transition px-2 py-1" title="Delete Entry">
+                    `;
+          }
+
+          tr.innerHTML = `
+                    <td class="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">${item.date}</td>
+                    <td class="px-6 py-4 font-medium text-slate-700">${escapeHtml(item.title)}</td>
+                    <td class="px-6 py-4"><span class="px-2.5 py-1 text-xs rounded-lg font-medium bg-slate-100 text-slate-600">${escapeHtml(item.category)}</span></td>
+                    <td class="px-6 py-4 font-semibold text-purple-600 whitespace-nowrap">$${item.amount.toFixed(2)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${fileButtonHtml}</td>
+                    <td class="px-6 py-4 text-right whitespace-nowrap">
+                        <button onclick="deleteExpense(${item.id})" class="text-slate-400 hover:text-rose-600 transition px-2 py-1" title="Delete Expense">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </td>
@@ -711,276 +1170,177 @@
         });
       }
 
-      // Aggregate statistics summary
-      function renderStats() {
-        let totalWorkedMs = 0;
-        let totalBreakMs = 0;
-        let totalEarnings = 0;
-
-        logs.forEach((log) => {
-          totalWorkedMs += log.netDurationMs;
-          totalBreakMs += log.breakMs;
-          const hours = log.netDurationMs / (1000 * 60 * 60);
-          totalEarnings += hours * (log.hourlyRate || hourlyRate);
-        });
-
-        const totalWorkedHours = (totalWorkedMs / (1000 * 60 * 60)).toFixed(2);
-        const totalBreakHours = (totalBreakMs / (1000 * 60 * 60)).toFixed(2);
-
-        document.getElementById("statWorkedHours").textContent =
-          `${totalWorkedHours} hrs`;
-        document.getElementById("statBreakHours").textContent =
-          `${totalBreakHours} hrs`;
-        document.getElementById("statEarnings").textContent =
-          `$${totalEarnings.toFixed(2)}`;
-      }
-
-      // Manual Shift Submission
-      function handleManualSubmit(e) {
-        e.preventDefault();
-
-        const dateVal = document.getElementById("mDate").value;
-        const startTimeVal = document.getElementById("mStartTime").value;
-        const endTimeVal = document.getElementById("mEndTime").value;
-        const breakMinsVal =
-          parseInt(document.getElementById("mBreakMins").value) || 0;
-        const notesVal = document.getElementById("mNotes").value.trim();
-
-        if (!dateVal || !startTimeVal || !endTimeVal) return;
-
-        const startDateTime = new Date(`${dateVal}T${startTimeVal}`);
-        let endDateTime = new Date(`${dateVal}T${endTimeVal}`);
-
-        // If end time is before start time, assume shift ended overnight next day
-        if (endDateTime < startDateTime) {
-          endDateTime.setDate(endDateTime.getDate() + 1);
-        }
-
-        const grossMs = endDateTime - startDateTime;
-        const breakMs = breakMinsVal * 60 * 1000;
-        const netMs = Math.max(0, grossMs - breakMs);
-
-        if (editingLogId) {
-          // Update existing record
-          const logIndex = logs.findIndex((l) => l.id === editingLogId);
-          if (logIndex !== -1) {
-            logs[logIndex] = {
-              ...logs[logIndex],
-              date: startDateTime.toLocaleDateString(),
-              startTime: startDateTime.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              endTime: endDateTime.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              rawStartISO: startDateTime.toISOString(),
-              rawEndISO: endDateTime.toISOString(),
-              breakMs: breakMs,
-              netDurationMs: netMs,
-              notes: notesVal,
-            };
-          }
-          editingLogId = null;
-        } else {
-          // Create new manual record
-          const manualLog = {
-            id: Date.now(),
-            date: startDateTime.toLocaleDateString(),
-            startTime: startDateTime.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            endTime: endDateTime.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            rawStartISO: startDateTime.toISOString(),
-            rawEndISO: endDateTime.toISOString(),
-            breakMs: breakMs,
-            netDurationMs: netMs,
-            hourlyRate: hourlyRate,
-            notes: notesVal,
-          };
-
-          logs.unshift(manualLog);
-        }
-
-        saveLogs();
+      function deleteExpense(id) {
+        expenses = expenses.filter((e) => e.id !== id);
+        saveExpenses();
         renderUI();
-
-        // Close & reset modal
-        toggleManualEntryModal();
-        document.getElementById("manualForm").reset();
-        document.getElementById("mDate").value = new Date()
-          .toISOString()
-          .split("T")[0];
       }
 
-      // Edit log entry populator
-      function editLog(id) {
-        const log = logs.find((l) => l.id === id);
-        if (!log) return;
+      function viewAttachment(id) {
+        const item = expenses.find((e) => e.id === id);
+        if (!item || !item.fileData) return;
 
-        editingLogId = id;
-        document.getElementById("modalTitle").textContent = "Edit Work Entry";
-        document.getElementById("modalSubmitBtn").textContent = "Update Entry";
+        const modal = document.getElementById("fileViewerModal");
+        const container = document.getElementById("fileViewerContent");
+        const title = document.getElementById("fileViewerTitle");
+        const downloadBtn = document.getElementById("fileDownloadBtn");
 
-        const startDate = log.rawStartISO
-          ? new Date(log.rawStartISO)
-          : new Date(log.date);
-        const endDate = log.rawEndISO
-          ? new Date(log.rawEndISO)
-          : new Date(log.date);
+        title.textContent = `Receipt: ${item.title} (${item.fileName || "Attachment"})`;
+        downloadBtn.href = item.fileData;
+        downloadBtn.download = item.fileName || "invoice_receipt";
 
-        // Populate local date YYYY-MM-DD
-        const year = startDate.getFullYear();
-        const month = String(startDate.getMonth() + 1).padStart(2, "0");
-        const day = String(startDate.getDate()).padStart(2, "0");
-        document.getElementById("mDate").value = `${year}-${month}-${day}`;
+        container.innerHTML = "";
 
-        // Populate local times HH:MM
-        const startHours = String(startDate.getHours()).padStart(2, "0");
-        const startMins = String(startDate.getMinutes()).padStart(2, "0");
-        document.getElementById("mStartTime").value =
-          `${startHours}:${startMins}`;
+        if (item.fileType && item.fileType.startsWith("image/")) {
+          const img = document.createElement("img");
+          img.src = item.fileData;
+          img.className =
+            "max-h-[60vh] max-w-full rounded-lg shadow-sm object-contain";
+          container.appendChild(img);
+        } else if (item.fileType === "application/pdf") {
+          const embed = document.createElement("iframe");
+          embed.src = item.fileData;
+          embed.className =
+            "w-full h-[60vh] rounded-lg border border-slate-200";
+          container.appendChild(embed);
+        } else {
+          container.innerHTML = `
+                    <div class="text-center p-6">
+                        <i class="fa-solid fa-file-lines text-5xl text-indigo-400 mb-3"></i>
+                        <p class="text-sm font-medium text-slate-700">${escapeHtml(item.fileName || "Document File")}</p>
+                        <p class="text-xs text-slate-400 mt-1">Preview not available directly for this file format.</p>
+                    </div>
+                `;
+        }
 
-        const endHours = String(endDate.getHours()).padStart(2, "0");
-        const endMins = String(endDate.getMinutes()).padStart(2, "0");
-        document.getElementById("mEndTime").value = `${endHours}:${endMins}`;
-
-        document.getElementById("mBreakMins").value = Math.round(
-          (log.breakMs || 0) / (1000 * 60),
-        );
-        document.getElementById("mNotes").value = log.notes || "";
-
-        const modal = document.getElementById("manualModal");
         modal.classList.remove("hidden");
         modal.classList.add("flex");
       }
 
-      // Helpers & Utilities
-      function toggleManualEntryModal() {
-        const modal = document.getElementById("manualModal");
-        const isOpening = modal.classList.contains("hidden");
-
-        if (isOpening) {
-          if (!editingLogId) {
-            document.getElementById("modalTitle").textContent =
-              "Add Manual Work Entry";
-            document.getElementById("modalSubmitBtn").textContent =
-              "Save Entry";
-            document.getElementById("manualForm").reset();
-            document.getElementById("mDate").value = new Date()
-              .toISOString()
-              .split("T")[0];
-          }
-        } else {
-          editingLogId = null;
-        }
-
-        modal.classList.toggle("hidden");
-        modal.classList.toggle("flex");
+      function closeFileViewer() {
+        const modal = document.getElementById("fileViewerModal");
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
       }
 
-      function deleteLog(id) {
-        logs = logs.filter((log) => log.id !== id);
-        saveLogs();
-        renderUI();
-      }
-
-      function clearHistory() {
-        if (logs.length === 0) return;
-        if (confirm("Are you sure you want to clear all shift history?")) {
-          logs = [];
-          saveLogs();
-          renderUI();
-        }
-      }
-
-      function exportCSV() {
-        if (logs.length === 0) {
-          alert("No logs available to export.");
-          return;
-        }
-
-        let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent +=
-          "Date,Start Time,End Time,Break (Mins),Net Hours,Hourly Rate,Gross Pay,Notes\n";
+      // Render summary statistics
+      function renderStats() {
+        let totalWorkedMs = 0;
+        let totalWorkEarnings = 0;
+        let totalExpenses = 0;
 
         logs.forEach((log) => {
-          const netHours = (log.netDurationMs / (1000 * 60 * 60)).toFixed(2);
-          const breakMins = Math.round(log.breakMs / (1000 * 60));
-          const rate = log.hourlyRate || hourlyRate;
-          const pay = (netHours * rate).toFixed(2);
-          const escapedNotes = `"${(log.notes || "").replace(/"/g, '""')}"`;
-
-          csvContent += `${log.date},${log.startTime},${log.endTime},${breakMins},${netHours},${rate},${pay},${escapedNotes}\n`;
+          totalWorkedMs += log.netDurationMs;
+          const hours = log.netDurationMs / (1000 * 60 * 60);
+          totalWorkEarnings += hours * (log.hourlyRate || hourlyRate);
         });
 
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute(
-          "download",
-          `work_time_logs_${new Date().toISOString().split("T")[0]}.csv`,
-        );
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        expenses.forEach((exp) => {
+          totalExpenses += exp.amount || 0;
+        });
+
+        const totalWorkedHours = (totalWorkedMs / (1000 * 60 * 60)).toFixed(2);
+        const grandTotalPayout = totalWorkEarnings + totalExpenses;
+
+        document.getElementById("statWorkedHours").textContent =
+          `${totalWorkedHours} hrs`;
+        document.getElementById("statEarnings").textContent =
+          `$${totalWorkEarnings.toFixed(2)}`;
+        document.getElementById("statExpenses").textContent =
+          `$${totalExpenses.toFixed(2)}`;
+        document.getElementById("statTotalPayout").textContent =
+          `$${grandTotalPayout.toFixed(2)}`;
       }
 
+      // Export & Import Data Features
+      function exportData() {
+        const backupPayload = {
+          version: "1.0",
+          exportDate: new Date().toISOString(),
+          hourlyRate: hourlyRate,
+          currentShift: currentShift,
+          logs: logs,
+          expenses: expenses,
+        };
+
+        const jsonStr = JSON.stringify(backupPayload, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `WorkLogPro_Backup_${new Date().toISOString().split("T")[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          try {
+            const data = JSON.parse(e.target.result);
+
+            if (data.logs && Array.isArray(data.logs)) logs = data.logs;
+            if (data.expenses && Array.isArray(data.expenses))
+              expenses = data.expenses;
+            if (data.hourlyRate) {
+              hourlyRate = data.hourlyRate;
+              document.getElementById("hourlyRate").value = hourlyRate;
+            }
+            if (data.currentShift !== undefined)
+              currentShift = data.currentShift;
+
+            saveRate();
+            saveShift();
+            saveLogs();
+            saveExpenses();
+            renderUI();
+
+            alert("WorkLog Pro data restored successfully!");
+          } catch (err) {
+            alert("Invalid backup file structure. Restoration failed.");
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      // Helpers & Persistence
       function saveRate() {
-        const rateInput = document.getElementById("hourlyRate");
-        hourlyRate = parseFloat(rateInput.value) || 0;
+        hourlyRate =
+          parseFloat(document.getElementById("hourlyRate").value) || 20.0;
         try {
           localStorage.setItem("wt_hourly_rate", hourlyRate);
-        } catch (e) {
-          console.error("Storage error", e);
-        }
-        renderUI();
+        } catch (e) {}
+        renderStats();
+        renderLogsTable();
       }
 
-      function formatMsToHMS(ms) {
-        const totalSec = Math.floor(ms / 1000);
-        const hrs = Math.floor(totalSec / 3600);
-        const mins = Math.floor((totalSec % 3600) / 60);
-        const secs = totalSec % 60;
-        return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-      }
-
-      function escapeHtml(text) {
-        return text
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;");
-      }
-
-      // Persistence in Local Storage
-      function saveActiveShift() {
+      function saveShift() {
         try {
-          if (currentShift) {
+          if (currentShift)
             localStorage.setItem(
               "wt_active_shift",
               JSON.stringify(currentShift),
             );
-          } else {
-            localStorage.removeItem("wt_active_shift");
-          }
-        } catch (e) {
-          console.error("Storage error", e);
-        }
+          else localStorage.removeItem("wt_active_shift");
+        } catch (e) {}
       }
 
       function saveLogs() {
         try {
           localStorage.setItem("wt_shift_logs", JSON.stringify(logs));
-        } catch (e) {
-          console.error("Storage error", e);
-        }
+        } catch (e) {}
+      }
+
+      function saveExpenses() {
+        try {
+          localStorage.setItem("wt_expenses", JSON.stringify(expenses));
+        } catch (e) {}
       }
 
       function loadStoredData() {
@@ -992,17 +1352,60 @@
           }
 
           const storedShift = localStorage.getItem("wt_active_shift");
-          if (storedShift) {
-            currentShift = JSON.parse(storedShift);
-          }
+          if (storedShift) currentShift = JSON.parse(storedShift);
 
           const storedLogs = localStorage.getItem("wt_shift_logs");
           if (storedLogs) {
             logs = JSON.parse(storedLogs);
+            // Automatic compatibility migration for older log formats (rawStartISO -> startTimeISO)
+            logs = logs.map((log) => {
+              const startISO =
+                log.startTimeISO ||
+                log.rawStartISO ||
+                (log.date
+                  ? new Date(log.date).toISOString()
+                  : new Date().toISOString());
+              const endISO = log.endTimeISO || log.rawEndISO || startISO;
+              return {
+                ...log,
+                startTimeISO: startISO,
+                endTimeISO: endISO,
+              };
+            });
           }
+
+          const storedExpenses = localStorage.getItem("wt_expenses");
+          if (storedExpenses) expenses = JSON.parse(storedExpenses);
         } catch (e) {
-          console.error("Error reading from localStorage", e);
+          console.error("Error loading stored data:", e);
         }
+      }
+
+      function formatMs(ms, includeHours = true) {
+        const seconds = Math.floor((ms / 1000) % 60);
+        const minutes = Math.floor((ms / (1000 * 60)) % 60);
+        const hours = Math.floor(ms / (1000 * 60 * 60));
+
+        const pad = (num) => String(num).padStart(2, "0");
+
+        if (includeHours) {
+          return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        }
+        return `${pad(minutes)}:${pad(seconds)}`;
+      }
+
+      function escapeHtml(str) {
+        if (!str) return "";
+        return str.replace(/[&<>"']/g, (match) => {
+          const escapeMap = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          };
+          return escapeMap[match];
+        });
       }
     </script>
   </body>
