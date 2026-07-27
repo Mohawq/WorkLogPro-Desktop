@@ -1,0 +1,1009 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Work Time Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      .pulse-subtle {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+    <!-- Header -->
+    <header class="bg-slate-900 text-white shadow-md">
+      <div
+        class="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4"
+      >
+        <div class="flex items-center space-x-3">
+          <div class="bg-indigo-600 p-2.5 rounded-lg text-white">
+            <i class="fa-solid font-bold fa-clock text-xl"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold leading-tight">WorkLog Pro</h1>
+            <p class="text-xs text-slate-400">Employee Time & Break Tracker</p>
+          </div>
+        </div>
+        <div
+          class="flex items-center gap-4 text-sm bg-slate-800 px-4 py-2 rounded-xl border border-slate-700"
+        >
+          <div class="text-right">
+            <div
+              id="liveClock"
+              class="font-mono font-bold text-lg text-indigo-400"
+            >
+              00:00:00 AM
+            </div>
+            <div id="liveDate" class="text-xs text-slate-400">
+              Loading date...
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main
+      class="max-w-5xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8"
+    >
+      <!-- Left Column: Clock & Actions -->
+      <section class="lg:col-span-1 space-y-6">
+        <!-- Current Status Card -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+          <h2
+            class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"
+          >
+            Current Status
+          </h2>
+
+          <!-- Status Badge -->
+          <div
+            id="statusBadge"
+            class="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-100 text-slate-600 font-medium text-base mb-6 transition-all duration-300"
+          >
+            <span class="w-3 h-3 rounded-full bg-slate-400"></span>
+            <span>Clocked Out</span>
+          </div>
+
+          <!-- Active Timers Info -->
+          <div
+            id="timerDisplay"
+            class="hidden text-center mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100"
+          >
+            <div
+              class="text-xs text-slate-500 font-medium mb-1"
+              id="timerLabel"
+            >
+              Current Shift Duration
+            </div>
+            <div
+              class="text-3xl font-mono font-bold text-slate-800"
+              id="timerValue"
+            >
+              00:00:00
+            </div>
+            <div
+              id="breakDurationSub"
+              class="text-xs text-amber-600 font-medium mt-1 hidden"
+            >
+              Break: <span id="breakSubValue">00:00:00</span>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="space-y-3">
+            <button
+              id="clockInBtn"
+              onclick="clockIn()"
+              class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-base"
+            >
+              <i class="fa-solid fa-play"></i> Clock In
+            </button>
+
+            <div class="grid grid-cols-2 gap-3">
+              <button
+                id="startBreakBtn"
+                onclick="startBreak()"
+                disabled
+                class="py-3 px-3 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm"
+              >
+                <i class="fa-solid fa-coffee"></i> Start Break
+              </button>
+              <button
+                id="endBreakBtn"
+                onclick="endBreak()"
+                disabled
+                class="py-3 px-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm"
+              >
+                <i class="fa-solid fa-mug-hot"></i> End Break
+              </button>
+            </div>
+
+            <button
+              id="clockOutBtn"
+              onclick="clockOut()"
+              disabled
+              class="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-base"
+            >
+              <i class="fa-solid fa-stop"></i> Clock Out
+            </button>
+          </div>
+        </div>
+
+        <!-- Settings / Rates -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+          <h2
+            class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4"
+          >
+            Shift Settings
+          </h2>
+          <div class="space-y-4">
+            <div>
+              <label
+                for="hourlyRate"
+                class="block text-xs font-medium text-slate-700 mb-1"
+                >Hourly Pay Rate ($)</label
+              >
+              <div class="relative rounded-md shadow-sm">
+                <div
+                  class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"
+                >
+                  $
+                </div>
+                <input
+                  type="number"
+                  id="hourlyRate"
+                  value="20.00"
+                  step="0.50"
+                  min="0"
+                  onchange="saveRate()"
+                  class="block w-full rounded-xl border-slate-300 pl-8 pr-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label
+                for="notesInput"
+                class="block text-xs font-medium text-slate-700 mb-1"
+                >Active Shift Notes</label
+              >
+              <input
+                type="text"
+                id="notesInput"
+                placeholder="Task details, job code..."
+                class="block w-full rounded-xl border-slate-300 px-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Manual Entry Toggle Button -->
+        <button
+          onclick="toggleManualEntryModal()"
+          class="w-full py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-xl transition text-sm flex items-center justify-center gap-2"
+        >
+          <i class="fa-solid fa-pen-to-square"></i> Add Past Entry
+        </button>
+      </section>
+
+      <!-- Right Column: Shift History & Summaries -->
+      <section class="lg:col-span-2 space-y-6">
+        <!-- Today's Stats Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div
+            class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
+          >
+            <div class="text-xs font-medium text-slate-400 uppercase">
+              Worked Hours
+            </div>
+            <div
+              id="statWorkedHours"
+              class="text-2xl font-bold text-slate-800 mt-1"
+            >
+              0.00 hrs
+            </div>
+          </div>
+          <div
+            class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
+          >
+            <div class="text-xs font-medium text-slate-400 uppercase">
+              Total Break
+            </div>
+            <div
+              id="statBreakHours"
+              class="text-2xl font-bold text-amber-600 mt-1"
+            >
+              0.00 hrs
+            </div>
+          </div>
+          <div
+            class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"
+          >
+            <div class="text-xs font-medium text-slate-400 uppercase">
+              Est. Earnings
+            </div>
+            <div
+              id="statEarnings"
+              class="text-2xl font-bold text-emerald-600 mt-1"
+            >
+              $0.00
+            </div>
+          </div>
+        </div>
+
+        <!-- History Logs -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+        >
+          <div
+            class="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+          >
+            <div>
+              <h2 class="text-lg font-bold text-slate-800">
+                Time Card History
+              </h2>
+              <p class="text-xs text-slate-400">
+                Overview of all tracked work sessions
+              </p>
+            </div>
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                onclick="exportCSV()"
+                class="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-xl transition flex items-center gap-1.5"
+              >
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button
+                onclick="clearHistory()"
+                class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium text-xs rounded-xl transition flex items-center gap-1.5"
+              >
+                <i class="fa-solid fa-trash-can"></i> Clear All
+              </button>
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+              <thead
+                class="bg-slate-50 text-slate-400 text-xs uppercase border-b border-slate-100"
+              >
+                <tr>
+                  <th class="px-6 py-3 font-semibold">Date</th>
+                  <th class="px-6 py-3 font-semibold">Shift Times</th>
+                  <th class="px-6 py-3 font-semibold">Break</th>
+                  <th class="px-6 py-3 font-semibold">Net Hours</th>
+                  <th class="px-6 py-3 font-semibold">Pay</th>
+                  <th class="px-6 py-3 font-semibold text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody" class="divide-y divide-slate-100">
+                <!-- Injected by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State -->
+          <div id="emptyState" class="p-12 text-center text-slate-400">
+            <i
+              class="fa-solid fa-calendar-minus text-4xl mb-3 text-slate-300"
+            ></i>
+            <p class="text-sm font-medium">No work records stored yet.</p>
+            <p class="text-xs text-slate-400 mt-1">
+              Clock in above or add a manual entry to get started.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Manual Entry Modal -->
+    <div
+      id="manualModal"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+    >
+      <div
+        class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4"
+      >
+        <div
+          class="flex justify-between items-center border-b border-slate-100 pb-3"
+        >
+          <h3 id="modalTitle" class="text-lg font-bold text-slate-800">
+            Add Manual Work Entry
+          </h3>
+          <button
+            onclick="toggleManualEntryModal()"
+            class="text-slate-400 hover:text-slate-600 text-lg"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <form
+          id="manualForm"
+          onsubmit="handleManualSubmit(event)"
+          class="space-y-4"
+        >
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Date</label
+            >
+            <input
+              type="date"
+              id="mDate"
+              required
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Start Time</label
+              >
+              <input
+                type="time"
+                id="mStartTime"
+                required
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >End Time</label
+              >
+              <input
+                type="time"
+                id="mEndTime"
+                required
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Total Break (Minutes)</label
+            >
+            <input
+              type="number"
+              id="mBreakMins"
+              min="0"
+              value="0"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Notes / Description</label
+            >
+            <input
+              type="text"
+              id="mNotes"
+              placeholder="Optional notes"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div class="flex gap-3 pt-2">
+            <button
+              type="button"
+              onclick="toggleManualEntryModal()"
+              class="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              id="modalSubmitBtn"
+              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+            >
+              Save Entry
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+      // State Variables
+      let currentShift = null; // { startTime, breakStart, totalBreakMs, notes }
+      let logs = [];
+      let hourlyRate = 20.0;
+      let timerInterval = null;
+      let editingLogId = null;
+
+      // Load persisted state on start
+      window.addEventListener("DOMContentLoaded", () => {
+        loadStoredData();
+        updateClock();
+        setInterval(updateClock, 1000);
+        renderUI();
+
+        // Set default date for manual entry modal
+        document.getElementById("mDate").value = new Date()
+          .toISOString()
+          .split("T")[0];
+      });
+
+      // Live Date Clock
+      function updateClock() {
+        const now = new Date();
+        document.getElementById("liveClock").textContent =
+          now.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+        document.getElementById("liveDate").textContent =
+          now.toLocaleDateString([], {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          });
+
+        if (currentShift) {
+          updateTimerDisplay();
+        }
+      }
+
+      // Clock In Action
+      function clockIn() {
+        if (currentShift) return;
+
+        currentShift = {
+          id: Date.now(),
+          startTime: new Date().toISOString(),
+          breakStart: null,
+          totalBreakMs: 0,
+          notes: document.getElementById("notesInput").value.trim(),
+        };
+
+        saveActiveShift();
+        renderUI();
+        startTimer();
+      }
+
+      // Start Break Action
+      function startBreak() {
+        if (!currentShift || currentShift.breakStart) return;
+
+        currentShift.breakStart = new Date().toISOString();
+        saveActiveShift();
+        renderUI();
+      }
+
+      // End Break Action
+      function endBreak() {
+        if (!currentShift || !currentShift.breakStart) return;
+
+        const breakEndTime = new Date();
+        const breakStartTime = new Date(currentShift.breakStart);
+        const duration = breakEndTime - breakStartTime;
+
+        currentShift.totalBreakMs += duration;
+        currentShift.breakStart = null;
+
+        saveActiveShift();
+        renderUI();
+      }
+
+      // Clock Out Action
+      function clockOut() {
+        if (!currentShift) return;
+
+        // If clocked out while still on break, end break automatically
+        if (currentShift.breakStart) {
+          const breakEndTime = new Date();
+          const breakStartTime = new Date(currentShift.breakStart);
+          currentShift.totalBreakMs += breakEndTime - breakStartTime;
+          currentShift.breakStart = null;
+        }
+
+        const endTime = new Date().toISOString();
+        const start = new Date(currentShift.startTime);
+        const end = new Date(endTime);
+        const grossDurationMs = end - start;
+        const netDurationMs = Math.max(
+          0,
+          grossDurationMs - currentShift.totalBreakMs,
+        );
+
+        const newLog = {
+          id: currentShift.id,
+          date: start.toLocaleDateString(),
+          startTime: start.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          endTime: end.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          rawStartISO: currentShift.startTime,
+          rawEndISO: endTime,
+          breakMs: currentShift.totalBreakMs,
+          netDurationMs: netDurationMs,
+          hourlyRate: hourlyRate,
+          notes:
+            currentShift.notes ||
+            document.getElementById("notesInput").value.trim(),
+        };
+
+        logs.unshift(newLog); // Add to top of array
+        currentShift = null;
+
+        // Clear active shift inputs
+        document.getElementById("notesInput").value = "";
+
+        saveActiveShift();
+        saveLogs();
+        stopTimer();
+        renderUI();
+      }
+
+      // Render UI state based on currentShift and stored logs
+      function renderUI() {
+        const statusBadge = document.getElementById("statusBadge");
+        const clockInBtn = document.getElementById("clockInBtn");
+        const startBreakBtn = document.getElementById("startBreakBtn");
+        const endBreakBtn = document.getElementById("endBreakBtn");
+        const clockOutBtn = document.getElementById("clockOutBtn");
+        const timerDisplay = document.getElementById("timerDisplay");
+        const breakDurationSub = document.getElementById("breakDurationSub");
+
+        if (!currentShift) {
+          // Clocked Out State
+          statusBadge.className =
+            "flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-100 text-slate-600 font-medium text-sm";
+          statusBadge.innerHTML = `<span class="w-3 h-3 rounded-full bg-slate-400"></span> Current Status: <strong>Clocked Out</strong>`;
+
+          clockInBtn.disabled = false;
+          startBreakBtn.disabled = true;
+          endBreakBtn.disabled = true;
+          clockOutBtn.disabled = true;
+
+          timerDisplay.classList.add("hidden");
+          stopTimer();
+        } else if (currentShift.breakStart) {
+          // On Break State
+          statusBadge.className =
+            "flex items-center justify-center gap-2 p-3 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 font-medium text-sm pulse-subtle";
+          statusBadge.innerHTML = `<span class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></span> Current Status: <strong>On Break</strong>`;
+
+          clockInBtn.disabled = true;
+          startBreakBtn.disabled = true;
+          endBreakBtn.disabled = false;
+          clockOutBtn.disabled = false;
+
+          timerDisplay.classList.remove("hidden");
+          breakDurationSub.classList.remove("hidden");
+          startTimer();
+        } else {
+          // Working State
+          statusBadge.className =
+            "flex items-center justify-center gap-2 p-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium text-sm";
+          statusBadge.innerHTML = `<span class="w-3 h-3 rounded-full bg-emerald-500"></span> Current Status: <strong>Working</strong>`;
+
+          clockInBtn.disabled = true;
+          startBreakBtn.disabled = false;
+          endBreakBtn.disabled = true;
+          clockOutBtn.disabled = false;
+
+          timerDisplay.classList.remove("hidden");
+          startTimer();
+        }
+
+        renderLogsTable();
+        renderStats();
+      }
+
+      // Live duration updates
+      function updateTimerDisplay() {
+        if (!currentShift) return;
+
+        const now = new Date();
+        const start = new Date(currentShift.startTime);
+
+        // Calculate active accumulated break time
+        let activeBreakMs = currentShift.totalBreakMs;
+        if (currentShift.breakStart) {
+          activeBreakMs += now - new Date(currentShift.breakStart);
+        }
+
+        const grossDurationMs = now - start;
+        const netDurationMs = Math.max(0, grossDurationMs - activeBreakMs);
+
+        if (currentShift.breakStart) {
+          document.getElementById("timerLabel").textContent =
+            "Current Break Duration";
+          const currentBreakMs = now - new Date(currentShift.breakStart);
+          document.getElementById("timerValue").textContent =
+            formatMsToHMS(currentBreakMs);
+        } else {
+          document.getElementById("timerLabel").textContent =
+            "Working Duration (Net)";
+          document.getElementById("timerValue").textContent =
+            formatMsToHMS(netDurationMs);
+        }
+
+        document.getElementById("breakSubValue").textContent =
+          formatMsToHMS(activeBreakMs);
+      }
+
+      function startTimer() {
+        if (!timerInterval) {
+          updateTimerDisplay();
+          timerInterval = setInterval(updateTimerDisplay, 1000);
+        }
+      }
+
+      function stopTimer() {
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+
+      // History logs table rendering
+      function renderLogsTable() {
+        const tbody = document.getElementById("logsTableBody");
+        const emptyState = document.getElementById("emptyState");
+
+        tbody.innerHTML = "";
+
+        if (logs.length === 0) {
+          emptyState.classList.remove("hidden");
+          return;
+        }
+
+        emptyState.classList.add("hidden");
+
+        logs.forEach((log) => {
+          const netHours = log.netDurationMs / (1000 * 60 * 60);
+          const breakMins = Math.round(log.breakMs / (1000 * 60));
+          const pay = netHours * (log.hourlyRate || hourlyRate);
+
+          const tr = document.createElement("tr");
+          tr.className = "hover:bg-slate-50/80 transition";
+          tr.innerHTML = `
+                    <td class="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">
+                        ${log.date}
+                        ${log.notes ? `<div class="text-xs text-slate-400 font-normal mt-0.5">${escapeHtml(log.notes)}</div>` : ""}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-slate-600">
+                        ${log.startTime} - ${log.endTime}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-slate-600">
+                        ${breakMins > 0 ? `<span class="text-amber-600 font-medium">${breakMins} mins</span>` : '<span class="text-slate-300">None</span>'}
+                    </td>
+                    <td class="px-6 py-4 font-semibold text-slate-800 whitespace-nowrap">
+                        ${netHours.toFixed(2)} hrs
+                    </td>
+                    <td class="px-6 py-4 font-semibold text-emerald-600 whitespace-nowrap">
+                        $${pay.toFixed(2)}
+                    </td>
+                    <td class="px-6 py-4 text-right whitespace-nowrap">
+                        <button onclick="editLog(${log.id})" class="text-slate-400 hover:text-indigo-600 transition px-2 py-1 mr-1" title="Edit Entry">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
+                        <button onclick="deleteLog(${log.id})" class="text-slate-300 hover:text-rose-600 transition px-2 py-1" title="Delete Entry">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Aggregate statistics summary
+      function renderStats() {
+        let totalWorkedMs = 0;
+        let totalBreakMs = 0;
+        let totalEarnings = 0;
+
+        logs.forEach((log) => {
+          totalWorkedMs += log.netDurationMs;
+          totalBreakMs += log.breakMs;
+          const hours = log.netDurationMs / (1000 * 60 * 60);
+          totalEarnings += hours * (log.hourlyRate || hourlyRate);
+        });
+
+        const totalWorkedHours = (totalWorkedMs / (1000 * 60 * 60)).toFixed(2);
+        const totalBreakHours = (totalBreakMs / (1000 * 60 * 60)).toFixed(2);
+
+        document.getElementById("statWorkedHours").textContent =
+          `${totalWorkedHours} hrs`;
+        document.getElementById("statBreakHours").textContent =
+          `${totalBreakHours} hrs`;
+        document.getElementById("statEarnings").textContent =
+          `$${totalEarnings.toFixed(2)}`;
+      }
+
+      // Manual Shift Submission
+      function handleManualSubmit(e) {
+        e.preventDefault();
+
+        const dateVal = document.getElementById("mDate").value;
+        const startTimeVal = document.getElementById("mStartTime").value;
+        const endTimeVal = document.getElementById("mEndTime").value;
+        const breakMinsVal =
+          parseInt(document.getElementById("mBreakMins").value) || 0;
+        const notesVal = document.getElementById("mNotes").value.trim();
+
+        if (!dateVal || !startTimeVal || !endTimeVal) return;
+
+        const startDateTime = new Date(`${dateVal}T${startTimeVal}`);
+        let endDateTime = new Date(`${dateVal}T${endTimeVal}`);
+
+        // If end time is before start time, assume shift ended overnight next day
+        if (endDateTime < startDateTime) {
+          endDateTime.setDate(endDateTime.getDate() + 1);
+        }
+
+        const grossMs = endDateTime - startDateTime;
+        const breakMs = breakMinsVal * 60 * 1000;
+        const netMs = Math.max(0, grossMs - breakMs);
+
+        if (editingLogId) {
+          // Update existing record
+          const logIndex = logs.findIndex((l) => l.id === editingLogId);
+          if (logIndex !== -1) {
+            logs[logIndex] = {
+              ...logs[logIndex],
+              date: startDateTime.toLocaleDateString(),
+              startTime: startDateTime.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              endTime: endDateTime.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              rawStartISO: startDateTime.toISOString(),
+              rawEndISO: endDateTime.toISOString(),
+              breakMs: breakMs,
+              netDurationMs: netMs,
+              notes: notesVal,
+            };
+          }
+          editingLogId = null;
+        } else {
+          // Create new manual record
+          const manualLog = {
+            id: Date.now(),
+            date: startDateTime.toLocaleDateString(),
+            startTime: startDateTime.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            endTime: endDateTime.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            rawStartISO: startDateTime.toISOString(),
+            rawEndISO: endDateTime.toISOString(),
+            breakMs: breakMs,
+            netDurationMs: netMs,
+            hourlyRate: hourlyRate,
+            notes: notesVal,
+          };
+
+          logs.unshift(manualLog);
+        }
+
+        saveLogs();
+        renderUI();
+
+        // Close & reset modal
+        toggleManualEntryModal();
+        document.getElementById("manualForm").reset();
+        document.getElementById("mDate").value = new Date()
+          .toISOString()
+          .split("T")[0];
+      }
+
+      // Edit log entry populator
+      function editLog(id) {
+        const log = logs.find((l) => l.id === id);
+        if (!log) return;
+
+        editingLogId = id;
+        document.getElementById("modalTitle").textContent = "Edit Work Entry";
+        document.getElementById("modalSubmitBtn").textContent = "Update Entry";
+
+        const startDate = log.rawStartISO
+          ? new Date(log.rawStartISO)
+          : new Date(log.date);
+        const endDate = log.rawEndISO
+          ? new Date(log.rawEndISO)
+          : new Date(log.date);
+
+        // Populate local date YYYY-MM-DD
+        const year = startDate.getFullYear();
+        const month = String(startDate.getMonth() + 1).padStart(2, "0");
+        const day = String(startDate.getDate()).padStart(2, "0");
+        document.getElementById("mDate").value = `${year}-${month}-${day}`;
+
+        // Populate local times HH:MM
+        const startHours = String(startDate.getHours()).padStart(2, "0");
+        const startMins = String(startDate.getMinutes()).padStart(2, "0");
+        document.getElementById("mStartTime").value =
+          `${startHours}:${startMins}`;
+
+        const endHours = String(endDate.getHours()).padStart(2, "0");
+        const endMins = String(endDate.getMinutes()).padStart(2, "0");
+        document.getElementById("mEndTime").value = `${endHours}:${endMins}`;
+
+        document.getElementById("mBreakMins").value = Math.round(
+          (log.breakMs || 0) / (1000 * 60),
+        );
+        document.getElementById("mNotes").value = log.notes || "";
+
+        const modal = document.getElementById("manualModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      }
+
+      // Helpers & Utilities
+      function toggleManualEntryModal() {
+        const modal = document.getElementById("manualModal");
+        const isOpening = modal.classList.contains("hidden");
+
+        if (isOpening) {
+          if (!editingLogId) {
+            document.getElementById("modalTitle").textContent =
+              "Add Manual Work Entry";
+            document.getElementById("modalSubmitBtn").textContent =
+              "Save Entry";
+            document.getElementById("manualForm").reset();
+            document.getElementById("mDate").value = new Date()
+              .toISOString()
+              .split("T")[0];
+          }
+        } else {
+          editingLogId = null;
+        }
+
+        modal.classList.toggle("hidden");
+        modal.classList.toggle("flex");
+      }
+
+      function deleteLog(id) {
+        logs = logs.filter((log) => log.id !== id);
+        saveLogs();
+        renderUI();
+      }
+
+      function clearHistory() {
+        if (logs.length === 0) return;
+        if (confirm("Are you sure you want to clear all shift history?")) {
+          logs = [];
+          saveLogs();
+          renderUI();
+        }
+      }
+
+      function exportCSV() {
+        if (logs.length === 0) {
+          alert("No logs available to export.");
+          return;
+        }
+
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent +=
+          "Date,Start Time,End Time,Break (Mins),Net Hours,Hourly Rate,Gross Pay,Notes\n";
+
+        logs.forEach((log) => {
+          const netHours = (log.netDurationMs / (1000 * 60 * 60)).toFixed(2);
+          const breakMins = Math.round(log.breakMs / (1000 * 60));
+          const rate = log.hourlyRate || hourlyRate;
+          const pay = (netHours * rate).toFixed(2);
+          const escapedNotes = `"${(log.notes || "").replace(/"/g, '""')}"`;
+
+          csvContent += `${log.date},${log.startTime},${log.endTime},${breakMins},${netHours},${rate},${pay},${escapedNotes}\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute(
+          "download",
+          `work_time_logs_${new Date().toISOString().split("T")[0]}.csv`,
+        );
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      function saveRate() {
+        const rateInput = document.getElementById("hourlyRate");
+        hourlyRate = parseFloat(rateInput.value) || 0;
+        try {
+          localStorage.setItem("wt_hourly_rate", hourlyRate);
+        } catch (e) {
+          console.error("Storage error", e);
+        }
+        renderUI();
+      }
+
+      function formatMsToHMS(ms) {
+        const totalSec = Math.floor(ms / 1000);
+        const hrs = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const secs = totalSec % 60;
+        return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+      }
+
+      function escapeHtml(text) {
+        return text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      // Persistence in Local Storage
+      function saveActiveShift() {
+        try {
+          if (currentShift) {
+            localStorage.setItem(
+              "wt_active_shift",
+              JSON.stringify(currentShift),
+            );
+          } else {
+            localStorage.removeItem("wt_active_shift");
+          }
+        } catch (e) {
+          console.error("Storage error", e);
+        }
+      }
+
+      function saveLogs() {
+        try {
+          localStorage.setItem("wt_shift_logs", JSON.stringify(logs));
+        } catch (e) {
+          console.error("Storage error", e);
+        }
+      }
+
+      function loadStoredData() {
+        try {
+          const storedRate = localStorage.getItem("wt_hourly_rate");
+          if (storedRate) {
+            hourlyRate = parseFloat(storedRate);
+            document.getElementById("hourlyRate").value = hourlyRate;
+          }
+
+          const storedShift = localStorage.getItem("wt_active_shift");
+          if (storedShift) {
+            currentShift = JSON.parse(storedShift);
+          }
+
+          const storedLogs = localStorage.getItem("wt_shift_logs");
+          if (storedLogs) {
+            logs = JSON.parse(storedLogs);
+          }
+        } catch (e) {
+          console.error("Error reading from localStorage", e);
+        }
+      }
+    </script>
+  </body>
+</html>

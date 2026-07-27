@@ -1,0 +1,12 @@
+# Node dependencies
+node_modules/
+
+# Build / Output folders
+dist/
+out/
+
+# Logs and environment
+*.log
+.DS_Store
+.env
+
