@@ -697,6 +697,9 @@
     <!-- Application JavaScript Logic -->
     <script>
       // State Variables
+      const SCHEMA_VERSION = 1;
+      const STORAGE_KEY = "wt_state";
+
       let currentShift = null; // { startTime, breakStart, totalBreakMs, notes }
       let logs = [];
       let expenses = [];
@@ -804,30 +807,41 @@
         document.getElementById("shiftTimer").textContent = "00h 00m 00s";
       }
 
+      // Helper to safely convert any date/timestamp format into numeric milliseconds
+      function getMsTimestamp(val) {
+        if (!val) return Date.now();
+        if (typeof val === "number" && !isNaN(val)) return val;
+        const parsed = new Date(val).getTime();
+        return isNaN(parsed) ? Date.now() : parsed;
+      }
+
       function updateTimerDisplay() {
         if (!currentShift) return;
 
         const now = Date.now();
-        let accumulatedBreak = currentShift.totalBreakMs || 0;
-        if (currentShift.breakStart) {
-          accumulatedBreak += now - currentShift.breakStart;
+        const startTime = getMsTimestamp(currentShift.startTime);
+        const breakStart = currentShift.breakStart
+          ? getMsTimestamp(currentShift.breakStart)
+          : null;
+        let accumulatedBreak = Number(currentShift.totalBreakMs) || 0;
+
+        if (breakStart) {
+          accumulatedBreak += now - breakStart;
         }
 
-        const elapsedMs = Math.max(
-          0,
-          now - currentShift.startTime - accumulatedBreak,
-        );
+        const elapsedMs = Math.max(0, now - startTime - accumulatedBreak);
         const formatted = formatMs(elapsedMs);
 
-        document.getElementById("activeDuration").textContent = formatted;
-        document.getElementById("shiftTimer").textContent = formatted;
+        const activeDurationEl = document.getElementById("activeDuration");
+        const shiftTimerEl = document.getElementById("shiftTimer");
+        if (activeDurationEl) activeDurationEl.textContent = formatted;
+        if (shiftTimerEl) shiftTimerEl.textContent = formatted;
 
-        if (currentShift.breakStart) {
-          const currentBreakMs = accumulatedBreak;
-          document.getElementById("breakDurationText").textContent = formatMs(
-            currentBreakMs,
-            false,
-          );
+        if (breakStart) {
+          const breakDurationText =
+            document.getElementById("breakDurationText");
+          if (breakDurationText)
+            breakDurationText.textContent = formatMs(accumulatedBreak, false);
         }
       }
 
@@ -854,7 +868,7 @@
         if (!currentShift || !currentShift.breakStart) return;
         const breakDuration = Date.now() - currentShift.breakStart;
         currentShift.totalBreakMs =
-          (currentShift.totalBreakMs || 0) + breakDuration;
+          (Number(currentShift.totalBreakMs) || 0) + breakDuration;
         currentShift.breakStart = null;
         saveShift();
         renderUI();
@@ -864,18 +878,23 @@
         if (!currentShift) return;
 
         const now = Date.now();
-        let totalBreak = currentShift.totalBreakMs || 0;
-        if (currentShift.breakStart) {
-          totalBreak += now - currentShift.breakStart;
+        const startTime = getMsTimestamp(currentShift.startTime);
+        const breakStart = currentShift.breakStart
+          ? getMsTimestamp(currentShift.breakStart)
+          : null;
+        let totalBreak = Number(currentShift.totalBreakMs) || 0;
+
+        if (breakStart) {
+          totalBreak += now - breakStart;
         }
 
-        const grossDuration = now - currentShift.startTime;
+        const grossDuration = now - startTime;
         const netDuration = Math.max(0, grossDuration - totalBreak);
 
         const newLog = {
           id: Date.now(),
-          date: new Date(currentShift.startTime).toLocaleDateString(),
-          startTimeISO: new Date(currentShift.startTime).toISOString(),
+          date: new Date(startTime).toLocaleDateString(),
+          startTimeISO: new Date(startTime).toISOString(),
           endTimeISO: new Date(now).toISOString(),
           breakMs: totalBreak,
           netDurationMs: netDuration,
@@ -890,9 +909,91 @@
         currentShift = null;
         document.getElementById("notesInput").value = "";
 
+        consolidateDailyLogs();
         saveShift();
         saveLogs();
         renderUI();
+      }
+
+      // Consolidate multiple shift entries on the same date into one assembled daily shift
+      function consolidateDailyLogs() {
+        if (!logs || logs.length === 0) return;
+
+        const grouped = {};
+        const dateOrder = [];
+
+        logs.forEach((log) => {
+          const startObj = new Date(log.startTimeISO || log.date);
+          const dateKey = `${startObj.getFullYear()}-${String(startObj.getMonth() + 1).padStart(2, "0")}-${String(startObj.getDate()).padStart(2, "0")}`;
+
+          if (!grouped[dateKey]) {
+            grouped[dateKey] = [];
+            dateOrder.push(dateKey);
+          }
+          grouped[dateKey].push(log);
+        });
+
+        const consolidated = dateOrder.map((dateKey) => {
+          const group = grouped[dateKey];
+          if (group.length === 1) {
+            return group[0];
+          }
+
+          let minStartMs = Infinity;
+          let maxEndMs = -Infinity;
+          let totalNetMs = 0;
+          let totalEarnings = 0;
+          const notesArr = [];
+
+          group.forEach((item) => {
+            const s = new Date(item.startTimeISO).getTime();
+            const e = new Date(item.endTimeISO).getTime();
+            if (s < minStartMs) minStartMs = s;
+            if (e > maxEndMs) maxEndMs = e;
+
+            const net = Number(item.netDurationMs) || 0;
+            totalNetMs += net;
+
+            const rate = Number(item.hourlyRate) || hourlyRate || 0;
+            totalEarnings += (net / (1000 * 60 * 60)) * rate;
+
+            if (
+              item.notes &&
+              item.notes.trim() &&
+              !notesArr.includes(item.notes.trim())
+            ) {
+              notesArr.push(item.notes.trim());
+            }
+          });
+
+          const spanMs = Math.max(0, maxEndMs - minStartMs);
+          const breakMs = Math.max(0, spanMs - totalNetMs);
+
+          const totalNetHours = totalNetMs / (1000 * 60 * 60);
+          const effectiveRate =
+            totalNetHours > 0
+              ? totalEarnings / totalNetHours
+              : group[0].hourlyRate || hourlyRate;
+
+          const sampleStart = new Date(minStartMs);
+
+          return {
+            id: group[0].id,
+            date: sampleStart.toLocaleDateString(),
+            startTimeISO: new Date(minStartMs).toISOString(),
+            endTimeISO: new Date(maxEndMs).toISOString(),
+            breakMs: breakMs,
+            netDurationMs: totalNetMs,
+            hourlyRate: parseFloat(effectiveRate.toFixed(2)),
+            notes:
+              notesArr.length > 0
+                ? notesArr.join(" | ")
+                : `${group.length} shifts merged`,
+            sessionCount: group.length,
+          };
+        });
+
+        logs = consolidated;
       }
 
       // Render shift logs table
@@ -922,14 +1023,24 @@
             minute: "2-digit",
           });
 
-          const netHours = (log.netDurationMs / (1000 * 60 * 60)).toFixed(2);
-          const breakMins = Math.round(log.breakMs / (1000 * 60));
-          const pay = (netHours * (log.hourlyRate || hourlyRate)).toFixed(2);
+          const netMs = Number(log.netDurationMs) || 0;
+          const netHours = (netMs / (1000 * 60 * 60)).toFixed(2);
+          const breakMins = Math.round(
+            (Number(log.breakMs) || 0) / (1000 * 60),
+          );
+          const pay = (
+            netHours * (Number(log.hourlyRate) || hourlyRate)
+          ).toFixed(2);
+
+          const sessionBadge =
+            log.sessionCount && log.sessionCount > 1
+              ? `<span class="ml-2 px-1.5 py-0.5 text-[10px] bg-indigo-100 text-indigo-700 font-semibold rounded-md">${log.sessionCount} shifts assembled</span>`
+              : "";
 
           const tr = document.createElement("tr");
           tr.className = "hover:bg-slate-50/80 transition";
           tr.innerHTML = `
-                    <td class="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">${log.date}</td>
+                    <td class="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">${log.date || "N/A"}${sessionBadge}</td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="font-medium text-slate-700">${startTimeStr} - ${endTimeStr}</div>
                         <div class="text-xs text-slate-400">${escapeHtml(log.notes)}</div>
@@ -1057,6 +1168,7 @@
           logs.unshift(newLog);
         }
 
+        consolidateDailyLogs();
         saveLogs();
         renderUI();
         toggleManualEntryModal();
@@ -1230,26 +1342,28 @@
         let totalExpenses = 0;
 
         logs.forEach((log) => {
-          totalWorkedMs += log.netDurationMs;
-          const hours = log.netDurationMs / (1000 * 60 * 60);
-          totalWorkEarnings += hours * (log.hourlyRate || hourlyRate);
+          const netMs = Number(log.netDurationMs) || 0;
+          totalWorkedMs += netMs;
+          const hours = netMs / (1000 * 60 * 60);
+          const rate = Number(log.hourlyRate) || hourlyRate || 0;
+          totalWorkEarnings += hours * rate;
         });
 
         expenses.forEach((exp) => {
-          totalExpenses += exp.amount || 0;
+          totalExpenses += Number(exp.amount) || 0;
         });
 
         const totalWorkedHours = (totalWorkedMs / (1000 * 60 * 60)).toFixed(2);
         const grandTotalPayout = totalWorkEarnings + totalExpenses;
 
         document.getElementById("statWorkedHours").textContent =
-          `${totalWorkedHours} hrs`;
+          `${isNaN(totalWorkedHours) ? "0.00" : totalWorkedHours} hrs`;
         document.getElementById("statEarnings").textContent =
-          `$${totalWorkEarnings.toFixed(2)}`;
+          `$${(isNaN(totalWorkEarnings) ? 0 : totalWorkEarnings).toFixed(2)}`;
         document.getElementById("statExpenses").textContent =
-          `$${totalExpenses.toFixed(2)}`;
+          `$${(isNaN(totalExpenses) ? 0 : totalExpenses).toFixed(2)}`;
         document.getElementById("statTotalPayout").textContent =
-          `$${grandTotalPayout.toFixed(2)}`;
+          `$${(isNaN(grandTotalPayout) ? 0 : grandTotalPayout).toFixed(2)}`;
       }
 
       // Export & Import Data Features
@@ -1286,14 +1400,27 @@
             const data = JSON.parse(e.target.result);
 
             if (data.logs && Array.isArray(data.logs)) logs = data.logs;
+            consolidateDailyLogs();
             if (data.expenses && Array.isArray(data.expenses))
               expenses = data.expenses;
             if (data.hourlyRate) {
-              hourlyRate = data.hourlyRate;
+              hourlyRate = parseFloat(data.hourlyRate) || 20.0;
               document.getElementById("hourlyRate").value = hourlyRate;
             }
-            if (data.currentShift !== undefined)
-              currentShift = data.currentShift;
+            if (data.currentShift !== undefined) {
+              if (data.currentShift && data.currentShift.startTime) {
+                currentShift = {
+                  ...data.currentShift,
+                  startTime: getMsTimestamp(data.currentShift.startTime),
+                  breakStart: data.currentShift.breakStart
+                    ? getMsTimestamp(data.currentShift.breakStart)
+                    : null,
+                  totalBreakMs: Number(data.currentShift.totalBreakMs) || 0,
+                };
+              } else {
+                currentShift = null;
+              }
+            }
 
             saveRate();
             saveShift();
@@ -1310,78 +1437,141 @@
       }
 
       // Helpers & Persistence
+      //
+      // All state lives in one versioned localStorage envelope (STORAGE_KEY) instead of
+      // four independent keys, so future changes to the stored shape can be migrated in
+      // one place (see loadStoredData) instead of silently corrupting old users' data.
+      function persistState() {
+        try {
+          localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+              schemaVersion: SCHEMA_VERSION,
+              hourlyRate,
+              currentShift,
+              logs,
+              expenses,
+            }),
+          );
+        } catch (e) {}
+      }
+
+      // saveRate/saveShift/saveLogs/saveExpenses are kept as named entry points (the
+      // hourlyRate input's onchange calls saveRate() directly) but now just persist the
+      // whole envelope, so callers no longer need to know which key backs which field.
       function saveRate() {
         hourlyRate =
           parseFloat(document.getElementById("hourlyRate").value) || 20.0;
-        try {
-          localStorage.setItem("wt_hourly_rate", hourlyRate);
-        } catch (e) {}
+        persistState();
         renderStats();
         renderLogsTable();
       }
 
       function saveShift() {
-        try {
-          if (currentShift)
-            localStorage.setItem(
-              "wt_active_shift",
-              JSON.stringify(currentShift),
-            );
-          else localStorage.removeItem("wt_active_shift");
-        } catch (e) {}
+        persistState();
       }
 
       function saveLogs() {
-        try {
-          localStorage.setItem("wt_shift_logs", JSON.stringify(logs));
-        } catch (e) {}
+        persistState();
       }
 
       function saveExpenses() {
-        try {
-          localStorage.setItem("wt_expenses", JSON.stringify(expenses));
-        } catch (e) {}
+        persistState();
+      }
+
+      function normalizeShift(raw) {
+        if (!raw || typeof raw !== "object" || !raw.startTime) return null;
+        return {
+          ...raw,
+          startTime: getMsTimestamp(raw.startTime),
+          breakStart: raw.breakStart ? getMsTimestamp(raw.breakStart) : null,
+          totalBreakMs: Number(raw.totalBreakMs) || 0,
+        };
+      }
+
+      function normalizeLogs(rawLogs) {
+        if (!Array.isArray(rawLogs)) return [];
+        return rawLogs.map((log) => {
+          const startISO =
+            log.startTimeISO ||
+            log.rawStartISO ||
+            (log.date
+              ? new Date(log.date).toISOString()
+              : new Date().toISOString());
+          const endISO = log.endTimeISO || log.rawEndISO || startISO;
+          return { ...log, startTimeISO: startISO, endTimeISO: endISO };
+        });
+      }
+
+      // One-time upgrade path for data written before STORAGE_KEY existed (four
+      // separate wt_* keys). Folds them into the versioned envelope, then removes them
+      // so this only ever runs once per install.
+      function migrateLegacyKeys() {
+        const legacyRate = localStorage.getItem("wt_hourly_rate");
+        const legacyShift = localStorage.getItem("wt_active_shift");
+        const legacyLogs = localStorage.getItem("wt_shift_logs");
+        const legacyExpenses = localStorage.getItem("wt_expenses");
+
+        if (legacyRate) hourlyRate = parseFloat(legacyRate) || 20.0;
+
+        if (legacyShift) {
+          try {
+            currentShift = normalizeShift(JSON.parse(legacyShift));
+          } catch (e) {
+            currentShift = null;
+          }
+        }
+
+        if (legacyLogs) {
+          try {
+            logs = normalizeLogs(JSON.parse(legacyLogs));
+            consolidateDailyLogs();
+          } catch (e) {}
+        }
+
+        if (legacyExpenses) {
+          try {
+            const parsed = JSON.parse(legacyExpenses);
+            expenses = Array.isArray(parsed) ? parsed : [];
+          } catch (e) {}
+        }
+
+        persistState();
+        [
+          "wt_hourly_rate",
+          "wt_active_shift",
+          "wt_shift_logs",
+          "wt_expenses",
+        ].forEach((key) => localStorage.removeItem(key));
       }
 
       function loadStoredData() {
         try {
-          const storedRate = localStorage.getItem("wt_hourly_rate");
-          if (storedRate) {
-            hourlyRate = parseFloat(storedRate);
-            document.getElementById("hourlyRate").value = hourlyRate;
+          const raw = localStorage.getItem(STORAGE_KEY);
+
+          if (!raw) {
+            migrateLegacyKeys();
+          } else {
+            const parsed = JSON.parse(raw);
+            // parsed.schemaVersion is available here for future migrations, e.g.:
+            // if (parsed.schemaVersion < 2) { ...upgrade shape... }
+            hourlyRate = parseFloat(parsed.hourlyRate) || 20.0;
+            currentShift = normalizeShift(parsed.currentShift);
+            logs = normalizeLogs(parsed.logs);
+            expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
+            consolidateDailyLogs();
           }
 
-          const storedShift = localStorage.getItem("wt_active_shift");
-          if (storedShift) currentShift = JSON.parse(storedShift);
-
-          const storedLogs = localStorage.getItem("wt_shift_logs");
-          if (storedLogs) {
-            logs = JSON.parse(storedLogs);
-            // Automatic compatibility migration for older log formats (rawStartISO -> startTimeISO)
-            logs = logs.map((log) => {
-              const startISO =
-                log.startTimeISO ||
-                log.rawStartISO ||
-                (log.date
-                  ? new Date(log.date).toISOString()
-                  : new Date().toISOString());
-              const endISO = log.endTimeISO || log.rawEndISO || startISO;
-              return {
-                ...log,
-                startTimeISO: startISO,
-                endTimeISO: endISO,
-              };
-            });
-          }
-
-          const storedExpenses = localStorage.getItem("wt_expenses");
-          if (storedExpenses) expenses = JSON.parse(storedExpenses);
+          document.getElementById("hourlyRate").value = hourlyRate;
         } catch (e) {
           console.error("Error loading stored data:", e);
         }
       }
 
       function formatMs(ms, includeHours = true) {
+        if (isNaN(ms) || ms === null || ms === undefined || ms < 0) {
+          return includeHours ? "00:00:00" : "00:00";
+        }
         const seconds = Math.floor((ms / 1000) % 60);
         const minutes = Math.floor((ms / (1000 * 60)) % 60);
         const hours = Math.floor(ms / (1000 * 60 * 60));
