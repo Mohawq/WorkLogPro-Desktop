@@ -62,6 +62,23 @@
         </div>
 
         <div class="flex items-center gap-3">
+          <!-- Active Project Badge -->
+          <div
+            class="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700"
+          >
+            <i class="fa-solid fa-folder-open text-indigo-400 text-xs"></i>
+            <span id="activeProjectName" class="text-xs font-semibold text-white"
+              >—</span
+            >
+            <button
+              id="switchProjectBtn"
+              onclick="requestSwitchProject()"
+              class="ml-1 text-[11px] text-indigo-300 hover:text-indigo-100 font-semibold underline decoration-dotted disabled:text-slate-500 disabled:no-underline disabled:cursor-not-allowed"
+            >
+              Switch
+            </button>
+          </div>
+
           <!-- Backup & Restore Buttons in Header -->
           <button
             onclick="exportData()"
@@ -102,6 +119,80 @@
         </div>
       </div>
     </header>
+
+    <!-- Project Picker Screen -->
+    <div
+      id="projectPickerScreen"
+      class="fixed inset-0 bg-slate-900/95 hidden flex-col items-center justify-center p-6 z-[100] overflow-y-auto"
+    >
+      <div
+        class="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 space-y-5 my-8"
+      >
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-bold text-slate-800">Select a Project</h2>
+            <p class="text-xs text-slate-400">
+              Choose which client/project to work in.
+            </p>
+          </div>
+          <button
+            id="projectPickerCloseBtn"
+            onclick="closeProjectPicker()"
+            class="hidden text-slate-400 hover:text-slate-600 text-lg"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div id="projectPickerList" class="space-y-2 max-h-64 overflow-y-auto">
+          <!-- Injected by JS -->
+        </div>
+
+        <div class="border-t border-slate-100 pt-4">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase mb-2">
+            Add New Project
+          </h3>
+          <form
+            id="newProjectForm"
+            onsubmit="handleAddProject(event)"
+            class="space-y-3"
+          >
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Project / Client Name</label
+              >
+              <input
+                type="text"
+                id="newProjectName"
+                required
+                placeholder="e.g. Almurooj School"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Hourly Rate ($)</label
+              >
+              <input
+                type="number"
+                id="newProjectRate"
+                step="0.50"
+                min="0"
+                required
+                placeholder="20.00"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+            >
+              <i class="fa-solid fa-plus"></i> Add & Select Project
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <!-- Main Container -->
     <main
@@ -151,6 +242,13 @@
             >
               Break time: <span id="breakDurationText">00:00</span>
             </div>
+            <button
+              type="button"
+              onclick="openEditActiveBreakModal()"
+              class="mt-2 text-[11px] text-indigo-500 hover:text-indigo-700 font-medium transition"
+            >
+              <i class="fa-solid fa-pen text-[10px]"></i> Adjust break time
+            </button>
           </div>
 
           <!-- Action Buttons -->
@@ -223,6 +321,9 @@
                   class="block w-full rounded-xl border-slate-300 pl-8 pr-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
               </div>
+              <p id="rateProjectHint" class="text-[11px] text-slate-400 mt-1">
+                Select a project to set its rate
+              </p>
             </div>
             <div>
               <label
@@ -236,6 +337,46 @@
                 placeholder="Task details, job code..."
                 class="block w-full rounded-xl border-slate-300 px-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
+            </div>
+
+            <div class="border-t border-slate-100 pt-4">
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Invoice Signature</label
+              >
+              <div class="flex items-center gap-3">
+                <img
+                  id="signaturePreview"
+                  src=""
+                  alt="Signature preview"
+                  class="hidden h-10 max-w-[100px] object-contain border border-slate-200 rounded-lg bg-white p-1"
+                />
+                <span id="signatureEmptyLabel" class="text-xs text-slate-400"
+                  >No signature uploaded</span
+                >
+                <label
+                  class="cursor-pointer text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                >
+                  Upload
+                  <input
+                    type="file"
+                    id="signatureFileInput"
+                    accept="image/png, image/jpeg"
+                    onchange="handleSignatureUpload(event)"
+                    class="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  id="signatureRemoveBtn"
+                  onclick="removeSignature()"
+                  class="hidden text-xs text-rose-600 hover:text-rose-800 font-semibold"
+                >
+                  Remove
+                </button>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">
+                Appears automatically on every generated invoice.
+              </p>
             </div>
           </div>
         </div>
@@ -379,6 +520,12 @@
                 Out-of-pocket payments and attached receipts/bills
               </p>
             </div>
+            <button
+              onclick="openCreateInvoiceModal()"
+              class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2"
+            >
+              <i class="fa-solid fa-file-invoice"></i> Create Invoice
+            </button>
           </div>
 
           <div class="overflow-x-auto">
@@ -406,6 +553,49 @@
             <p class="text-sm font-medium">
               No expense records or bills added yet.
             </p>
+          </div>
+        </div>
+
+        <!-- Invoice History Table -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+        >
+          <div
+            class="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+          >
+            <div>
+              <h2 class="text-lg font-bold text-slate-800">
+                Invoice History
+              </h2>
+              <p class="text-xs text-slate-400">
+                Previously generated client invoices
+              </p>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+              <thead
+                class="bg-slate-50 text-slate-400 text-xs uppercase border-b border-slate-100"
+              >
+                <tr>
+                  <th class="px-6 py-3 font-semibold">Invoice #</th>
+                  <th class="px-6 py-3 font-semibold">Client</th>
+                  <th class="px-6 py-3 font-semibold">Date Issued</th>
+                  <th class="px-6 py-3 font-semibold">Total</th>
+                  <th class="px-6 py-3 font-semibold">Lang</th>
+                  <th class="px-6 py-3 font-semibold text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="invoiceHistoryBody" class="divide-y divide-slate-100">
+                <!-- Injected by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <div id="emptyInvoiceState" class="p-8 text-center text-slate-400">
+            <i class="fa-solid fa-file-invoice text-3xl mb-2 text-slate-300"></i>
+            <p class="text-sm font-medium">No invoices created yet.</p>
           </div>
         </div>
       </section>
@@ -530,6 +720,69 @@
       </div>
     </div>
 
+    <!-- Adjust Active Break Modal -->
+    <div
+      id="editBreakModal"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+    >
+      <div
+        class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100 space-y-4"
+      >
+        <div
+          class="flex justify-between items-center border-b border-slate-100 pb-3"
+        >
+          <h3 class="text-lg font-bold text-slate-800">Adjust Break Time</h3>
+          <button
+            onclick="closeEditBreakModal()"
+            class="text-slate-400 hover:text-slate-600 text-lg"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <p class="text-xs text-slate-500">
+          Forgot to end your break? Enter the actual total break time for
+          this shift so far. Saving will end any break currently in
+          progress and return you to Working status.
+        </p>
+
+        <form
+          id="editBreakForm"
+          onsubmit="saveActiveBreakEdit(event)"
+          class="space-y-4"
+        >
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Total Break Time So Far (mins)</label
+            >
+            <input
+              type="number"
+              id="ebBreakMinutes"
+              min="0"
+              required
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div class="flex gap-3 pt-2">
+            <button
+              type="button"
+              onclick="closeEditBreakModal()"
+              class="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Expense Modal -->
     <div
       id="expenseModal"
@@ -645,6 +898,354 @@
       </div>
     </div>
 
+    <!-- Create Invoice Modal -->
+    <div
+      id="createInvoiceModal"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+    >
+      <div
+        class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto"
+      >
+        <div
+          class="flex justify-between items-center border-b border-slate-100 pb-3"
+        >
+          <h3 class="text-lg font-bold text-slate-800">Create Invoice</h3>
+          <button
+            onclick="closeCreateInvoiceModal()"
+            class="text-slate-400 hover:text-slate-600 text-lg"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <form
+          id="createInvoiceForm"
+          onsubmit="handleCreateInvoiceSubmit(event)"
+          class="space-y-4"
+        >
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Your Name / Business</label
+              >
+              <input
+                type="text"
+                id="invBusinessName"
+                placeholder="e.g. Jane Doe Consulting"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Invoice Number</label
+              >
+              <input
+                type="text"
+                id="invNumber"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Bill To (client name, company, email...)</label
+            >
+            <textarea
+              id="invClientDetails"
+              rows="3"
+              placeholder="Client Name&#10;Company&#10;client@email.com"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            ></textarea>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Date Issued</label
+            >
+            <input
+              type="date"
+              id="invDateIssued"
+              required
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div class="border-t border-slate-100 pt-4">
+            <label class="block text-xs font-medium text-slate-700 mb-1"
+              >Shift & Expense Date Range</label
+            >
+            <div class="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                id="invRangeStart"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+              <input
+                type="date"
+                id="invRangeEnd"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onclick="loadInvoiceRecordsForRange()"
+              class="mt-2 w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition"
+            >
+              Find Shifts & Expenses in Range
+            </button>
+          </div>
+
+          <div id="invRecordsPicker" class="hidden space-y-4">
+            <div>
+              <div class="text-xs font-semibold text-slate-500 uppercase mb-1">
+                Shifts
+              </div>
+              <div
+                id="invShiftChecklist"
+                class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl px-3 py-2"
+              ></div>
+            </div>
+            <div>
+              <div class="text-xs font-semibold text-slate-500 uppercase mb-1">
+                Expenses
+              </div>
+              <div
+                id="invExpenseChecklist"
+                class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl px-3 py-2"
+              ></div>
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-2">
+            <button
+              type="button"
+              onclick="closeCreateInvoiceModal()"
+              class="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+            >
+              Continue to Preview
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Invoice Preview Modal -->
+    <div
+      id="invoicePreviewModal"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+    >
+      <div
+        class="bg-white rounded-2xl max-w-6xl w-full p-6 shadow-xl border border-slate-100 space-y-4 max-h-[95vh] overflow-y-auto"
+      >
+        <div
+          class="flex justify-between items-center border-b border-slate-100 pb-3"
+        >
+          <h3 class="text-lg font-bold text-slate-800">Invoice Preview</h3>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              id="pvLangEnBtn"
+              onclick="setInvoiceLanguage('en')"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-indigo-600 text-white"
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              id="pvLangArBtn"
+              onclick="setInvoiceLanguage('ar')"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-slate-100 text-slate-600"
+            >
+              AR
+            </button>
+            <button
+              onclick="closeInvoicePreviewModal()"
+              class="text-slate-400 hover:text-slate-600 text-lg ml-2"
+            >
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Editable form -->
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1"
+                  >Your Name / Business</label
+                >
+                <input
+                  type="text"
+                  id="pvBusinessName"
+                  oninput="renderInvoiceLivePreview()"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1"
+                  >Invoice Number</label
+                >
+                <input
+                  type="text"
+                  id="pvInvoiceNumber"
+                  oninput="renderInvoiceLivePreview()"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Bill To</label
+              >
+              <textarea
+                id="pvClientDetails"
+                rows="2"
+                oninput="renderInvoiceLivePreview()"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              ></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-700 mb-1"
+                >Date Issued</label
+              >
+              <input
+                type="date"
+                id="pvDateIssued"
+                oninput="renderInvoiceLivePreview()"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div id="pvSignatureToggleWrap" class="hidden flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="pvIncludeSignature"
+                checked
+                onchange="updateInvoiceSignatureToggle(this.checked)"
+                class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label for="pvIncludeSignature" class="text-xs font-medium text-slate-700"
+                >Include signature on this invoice</label
+              >
+            </div>
+
+            <div>
+              <div class="text-xs font-semibold text-slate-500 uppercase mb-1">
+                Work Summary
+              </div>
+              <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-50 text-slate-400 uppercase">
+                    <tr>
+                      <th class="px-2 py-1.5">Date</th>
+                      <th class="px-2 py-1.5">Description</th>
+                      <th class="px-2 py-1.5">Hours</th>
+                      <th class="px-2 py-1.5">Rate</th>
+                      <th class="px-2 py-1.5">Amount</th>
+                      <th class="px-2 py-1.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody
+                    id="pvWorkItemsBody"
+                    class="divide-y divide-slate-100"
+                  ></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <div class="text-xs font-semibold text-slate-500 uppercase">
+                  Expenses & Line Items
+                </div>
+                <button
+                  type="button"
+                  onclick="addManualLineItem()"
+                  class="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold"
+                >
+                  <i class="fa-solid fa-plus"></i> Add Line Item
+                </button>
+              </div>
+              <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-50 text-slate-400 uppercase">
+                    <tr>
+                      <th class="px-2 py-1.5">Description</th>
+                      <th class="px-2 py-1.5">Amount</th>
+                      <th class="px-2 py-1.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody
+                    id="pvExpenseItemsBody"
+                    class="divide-y divide-slate-100"
+                  ></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="bg-slate-50 rounded-xl p-4 space-y-2">
+              <div class="flex justify-between text-sm text-slate-600">
+                <span>Labor Subtotal</span>
+                <span id="pvLaborSubtotal">$0.00</span>
+              </div>
+              <div class="flex justify-between text-sm text-slate-600">
+                <span>Expenses Subtotal</span>
+                <span id="pvExpensesSubtotal">$0.00</span>
+              </div>
+              <div
+                class="flex justify-between items-center text-sm text-slate-600"
+              >
+                <span>Discount ($)</span>
+                <input
+                  type="number"
+                  id="pvDiscount"
+                  step="0.01"
+                  min="0"
+                  value="0"
+                  oninput="updateInvoiceDiscount(this.value)"
+                  class="w-24 text-right px-2 py-1 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+              <div
+                class="flex justify-between text-base font-bold text-slate-800 border-t border-slate-200 pt-2"
+              >
+                <span>Grand Total</span>
+                <span id="pvGrandTotal">$0.00</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              id="pvExportBtn"
+              onclick="exportInvoiceToPDF()"
+              class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2"
+            >
+              <i class="fa-solid fa-file-pdf"></i> Export PDF
+            </button>
+          </div>
+
+          <!-- Live rendered preview (exactly what will be printed) -->
+          <div
+            class="border border-slate-200 rounded-xl overflow-hidden bg-slate-100"
+          >
+            <iframe
+              id="invoicePreviewFrame"
+              class="w-full h-full min-h-[500px] bg-white"
+              title="Invoice preview"
+            ></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- File Viewer Modal -->
     <div
       id="fileViewerModal"
@@ -697,19 +1298,58 @@
     <!-- Application JavaScript Logic -->
     <script>
       // State Variables
-      const SCHEMA_VERSION = 1;
+      const SCHEMA_VERSION = 3; // v3 adds multi-project support (projects, activeProjectId, projectId on shifts/expenses/invoices)
       const STORAGE_KEY = "wt_state";
 
-      let currentShift = null; // { startTime, breakStart, totalBreakMs, notes }
+      let currentShift = null; // { startTime, breakStart, totalBreakMs, notes, projectId }
       let logs = [];
       let expenses = [];
+      // Legacy single global rate — no longer the source of truth for new
+      // shifts (rate now lives per-project), kept only as a migration
+      // source and read-only fallback. See getActiveRate()/getProjectRate().
       let hourlyRate = 20.0;
       let timerInterval = null;
       let editingLogId = null;
 
+      // Invoicing state (schema v2)
+      let invoices = [];
+      let nextInvoiceNumber = 1;
+      let businessName = "";
+      let signatureImage = null; // base64 data URL, uploaded once and reused on every invoice — global, not per-project
+      let invoiceDraft = null; // the invoice currently being built/edited in the preview
+
+      // Multi-project state (schema v3)
+      let projects = []; // { id, name, hourlyRate, createdAt }
+      let activeProjectId = null;
+
+      function getActiveProject() {
+        return projects.find((p) => p.id === activeProjectId) || null;
+      }
+
+      function getProjectRate(projectId) {
+        const project = projects.find((p) => p.id === projectId);
+        return project ? Number(project.hourlyRate) || 0 : 0;
+      }
+
+      function getActiveRate() {
+        return activeProjectId ? getProjectRate(activeProjectId) : 0;
+      }
+
+      // logs/expenses stay one flat array each (tagged with projectId) rather
+      // than nested per-project collections, so these two filters are the
+      // single choke point every render function reads through.
+      function getActiveLogs() {
+        return logs.filter((l) => l.projectId === activeProjectId);
+      }
+
+      function getActiveExpenses() {
+        return expenses.filter((e) => e.projectId === activeProjectId);
+      }
+
       // Load persisted state on startup
       window.addEventListener("DOMContentLoaded", () => {
         loadStoredData();
+        initProjectFlow();
         updateClock();
         setInterval(updateClock, 1000);
         renderUI();
@@ -790,9 +1430,12 @@
           startTimer();
         }
 
+        renderProjectBadge();
         renderLogsTable();
         renderExpensesTable();
         renderStats();
+        renderInvoiceHistory();
+        renderSignatureSettings();
       }
 
       // Live shift timer updates
@@ -847,11 +1490,16 @@
 
       // Clock actions
       function clockIn() {
+        if (!activeProjectId) {
+          alert("Select a project first.");
+          return;
+        }
         currentShift = {
           startTime: Date.now(),
           breakStart: null,
           totalBreakMs: 0,
           notes: document.getElementById("notesInput").value.trim(),
+          projectId: activeProjectId,
         };
         saveShift();
         renderUI();
@@ -874,6 +1522,57 @@
         renderUI();
       }
 
+      // Manually correct the active shift's break time, e.g. when the user
+      // forgot to click "End Break". Overwrites the accumulated break total
+      // and ends any break currently in progress, since specifying the true
+      // total implies the break is over.
+      function openEditActiveBreakModal() {
+        if (!currentShift) return;
+
+        const now = Date.now();
+        let accumulatedBreak = Number(currentShift.totalBreakMs) || 0;
+        if (currentShift.breakStart) {
+          accumulatedBreak += now - getMsTimestamp(currentShift.breakStart);
+        }
+
+        document.getElementById("ebBreakMinutes").value = Math.round(
+          accumulatedBreak / (1000 * 60),
+        );
+
+        const modal = document.getElementById("editBreakModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      }
+
+      function closeEditBreakModal() {
+        const modal = document.getElementById("editBreakModal");
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      }
+
+      function saveActiveBreakEdit(event) {
+        event.preventDefault();
+        if (!currentShift) {
+          closeEditBreakModal();
+          return;
+        }
+
+        const minutes = parseInt(
+          document.getElementById("ebBreakMinutes").value,
+        );
+        if (isNaN(minutes) || minutes < 0) {
+          alert("Enter a valid number of minutes.");
+          return;
+        }
+
+        currentShift.totalBreakMs = minutes * 60 * 1000;
+        currentShift.breakStart = null; // Correcting the total implies the break is now over
+
+        saveShift();
+        renderUI();
+        closeEditBreakModal();
+      }
+
       function clockOut() {
         if (!currentShift) return;
 
@@ -893,12 +1592,13 @@
 
         const newLog = {
           id: Date.now(),
+          projectId: currentShift.projectId || activeProjectId,
           date: new Date(startTime).toLocaleDateString(),
           startTimeISO: new Date(startTime).toISOString(),
           endTimeISO: new Date(now).toISOString(),
           breakMs: totalBreak,
           netDurationMs: netDuration,
-          hourlyRate: hourlyRate,
+          hourlyRate: getProjectRate(currentShift.projectId || activeProjectId),
           notes:
             document.getElementById("notesInput").value.trim() ||
             currentShift.notes ||
@@ -915,29 +1615,40 @@
         renderUI();
       }
 
-      // Consolidate multiple shift entries on the same date into one assembled daily shift
+      // Consolidate multiple shift entries on the same date into one assembled daily shift.
+      //
+      // Runs over the FULL flat `logs` array (all projects), so the grouping
+      // key must include projectId, not just the calendar date — otherwise
+      // two different projects' shifts on the same day would get merged
+      // into one entry, and rewriting `logs = consolidated` at the end would
+      // silently destroy the project boundary (and any project not touched
+      // by this call would still need to survive unchanged in the result).
       function consolidateDailyLogs() {
         if (!logs || logs.length === 0) return;
 
         const grouped = {};
-        const dateOrder = [];
+        const groupOrder = [];
 
         logs.forEach((log) => {
           const startObj = new Date(log.startTimeISO || log.date);
           const dateKey = `${startObj.getFullYear()}-${String(startObj.getMonth() + 1).padStart(2, "0")}-${String(startObj.getDate()).padStart(2, "0")}`;
+          const groupKey = `${log.projectId || ""}::${dateKey}`;
 
-          if (!grouped[dateKey]) {
-            grouped[dateKey] = [];
-            dateOrder.push(dateKey);
+          if (!grouped[groupKey]) {
+            grouped[groupKey] = [];
+            groupOrder.push(groupKey);
           }
-          grouped[dateKey].push(log);
+          grouped[groupKey].push(log);
         });
 
-        const consolidated = dateOrder.map((dateKey) => {
-          const group = grouped[dateKey];
+        const consolidated = groupOrder.map((groupKey) => {
+          const group = grouped[groupKey];
           if (group.length === 1) {
             return group[0];
           }
+
+          const projectId = group[0].projectId;
+          const fallbackRate = getProjectRate(projectId) || hourlyRate || 0;
 
           let minStartMs = Infinity;
           let maxEndMs = -Infinity;
@@ -954,7 +1665,7 @@
             const net = Number(item.netDurationMs) || 0;
             totalNetMs += net;
 
-            const rate = Number(item.hourlyRate) || hourlyRate || 0;
+            const rate = Number(item.hourlyRate) || fallbackRate;
             totalEarnings += (net / (1000 * 60 * 60)) * rate;
 
             if (
@@ -973,12 +1684,13 @@
           const effectiveRate =
             totalNetHours > 0
               ? totalEarnings / totalNetHours
-              : group[0].hourlyRate || hourlyRate;
+              : group[0].hourlyRate || fallbackRate;
 
           const sampleStart = new Date(minStartMs);
 
           return {
             id: group[0].id,
+            projectId: projectId,
             date: sampleStart.toLocaleDateString(),
             startTimeISO: new Date(minStartMs).toISOString(),
             endTimeISO: new Date(maxEndMs).toISOString(),
@@ -996,21 +1708,22 @@
         logs = consolidated;
       }
 
-      // Render shift logs table
+      // Render shift logs table (active project only)
       function renderLogsTable() {
         const tbody = document.getElementById("logsTableBody");
         const emptyState = document.getElementById("emptyState");
+        const activeLogs = getActiveLogs();
 
         tbody.innerHTML = "";
 
-        if (logs.length === 0) {
+        if (activeLogs.length === 0) {
           emptyState.classList.remove("hidden");
           return;
         }
 
         emptyState.classList.add("hidden");
 
-        logs.forEach((log) => {
+        activeLogs.forEach((log) => {
           const startObj = new Date(log.startTimeISO);
           const endObj = new Date(log.endTimeISO);
 
@@ -1029,7 +1742,7 @@
             (Number(log.breakMs) || 0) / (1000 * 60),
           );
           const pay = (
-            netHours * (Number(log.hourlyRate) || hourlyRate)
+            netHours * (Number(log.hourlyRate) || getActiveRate())
           ).toFixed(2);
 
           const sessionBadge =
@@ -1075,7 +1788,7 @@
           document.getElementById("mDate").value = new Date()
             .toISOString()
             .split("T")[0];
-          document.getElementById("mRate").value = hourlyRate;
+          document.getElementById("mRate").value = getActiveRate();
         }
         modal.classList.toggle("hidden");
         modal.classList.toggle("flex");
@@ -1103,7 +1816,8 @@
         document.getElementById("mBreak").value = Math.round(
           log.breakMs / (1000 * 60),
         );
-        document.getElementById("mRate").value = log.hourlyRate || hourlyRate;
+        document.getElementById("mRate").value =
+          log.hourlyRate || getActiveRate();
         document.getElementById("mNotes").value = log.notes || "";
 
         const modal = document.getElementById("manualEntryModal");
@@ -1120,7 +1834,8 @@
         const breakMins =
           parseInt(document.getElementById("mBreak").value) || 0;
         const rateVal =
-          parseFloat(document.getElementById("mRate").value) || hourlyRate;
+          parseFloat(document.getElementById("mRate").value) ||
+          getActiveRate();
         const notesVal = document.getElementById("mNotes").value.trim();
 
         if (!dateVal || !startVal || !endVal) return;
@@ -1157,6 +1872,7 @@
         } else {
           const newLog = {
             id: Date.now(),
+            projectId: activeProjectId,
             date: new Date(startISO).toLocaleDateString(),
             startTimeISO: startISO,
             endTimeISO: endISO,
@@ -1208,6 +1924,7 @@
 
         const newExpense = {
           id: Date.now(),
+          projectId: activeProjectId,
           date: new Date(dateVal + "T00:00:00").toLocaleDateString(),
           title: titleVal,
           amount: amountVal,
@@ -1242,17 +1959,18 @@
       function renderExpensesTable() {
         const tbody = document.getElementById("expensesTableBody");
         const emptyState = document.getElementById("emptyExpensesState");
+        const activeExpenses = getActiveExpenses();
 
         tbody.innerHTML = "";
 
-        if (expenses.length === 0) {
+        if (activeExpenses.length === 0) {
           emptyState.classList.remove("hidden");
           return;
         }
 
         emptyState.classList.add("hidden");
 
-        expenses.forEach((item) => {
+        activeExpenses.forEach((item) => {
           const tr = document.createElement("tr");
           tr.className = "hover:bg-slate-50/80 transition";
 
@@ -1341,15 +2059,15 @@
         let totalWorkEarnings = 0;
         let totalExpenses = 0;
 
-        logs.forEach((log) => {
+        getActiveLogs().forEach((log) => {
           const netMs = Number(log.netDurationMs) || 0;
           totalWorkedMs += netMs;
           const hours = netMs / (1000 * 60 * 60);
-          const rate = Number(log.hourlyRate) || hourlyRate || 0;
+          const rate = Number(log.hourlyRate) || getActiveRate();
           totalWorkEarnings += hours * rate;
         });
 
-        expenses.forEach((exp) => {
+        getActiveExpenses().forEach((exp) => {
           totalExpenses += Number(exp.amount) || 0;
         });
 
@@ -1364,6 +2082,1044 @@
           `$${(isNaN(totalExpenses) ? 0 : totalExpenses).toFixed(2)}`;
         document.getElementById("statTotalPayout").textContent =
           `$${(isNaN(grandTotalPayout) ? 0 : grandTotalPayout).toFixed(2)}`;
+      }
+
+      // Project Management
+      //
+      // Every project/client is kept fully separate: its own hourly rate,
+      // and its own slice of the flat logs/expenses/invoices arrays (via
+      // projectId). Only signatureImage stays global — a freelancer signs
+      // the same way regardless of client.
+
+      // Decides what happens at startup, once loadStoredData() has already
+      // resolved `projects`/`activeProjectId` (including running the v2->v3
+      // migration if needed). Runs before renderUI() paints the dashboard.
+      function initProjectFlow() {
+        if (projects.length === 0) {
+          // Nothing to pick — force the "Add New Project" flow, no way to
+          // close back to a dashboard that has no project to show yet.
+          openProjectPicker(false);
+          return;
+        }
+
+        if (projects.length === 1) {
+          // Common case: don't make the user click through a picker just to
+          // confirm the one project they have.
+          if (activeProjectId !== projects[0].id) {
+            activeProjectId = projects[0].id;
+            persistState();
+          }
+          return;
+        }
+
+        // 2+ projects: always confirm which one this launch is for, rather
+        // than silently reusing whatever was last active.
+        openProjectPicker(!!activeProjectId);
+      }
+
+      // allowClose: whether a close button is offered (there's nothing to
+      // go back to on a forced first-run pick, or when zero projects exist).
+      function openProjectPicker(allowClose) {
+        renderProjectPickerList();
+        document
+          .getElementById("projectPickerCloseBtn")
+          .classList.toggle("hidden", !allowClose);
+        document.getElementById("newProjectName").value = "";
+        document.getElementById("newProjectRate").value = "";
+
+        const screen = document.getElementById("projectPickerScreen");
+        screen.classList.remove("hidden");
+        screen.classList.add("flex");
+      }
+
+      function closeProjectPicker() {
+        const screen = document.getElementById("projectPickerScreen");
+        screen.classList.add("hidden");
+        screen.classList.remove("flex");
+      }
+
+      // Clicking "Switch Project" in the header routes through here rather
+      // than calling openProjectPicker() directly, so the active-shift
+      // guard holds even if the button's disabled state hasn't repainted
+      // yet for some reason.
+      function requestSwitchProject() {
+        if (currentShift) {
+          alert(
+            "Clock out before switching projects — an active shift belongs to one project at a time.",
+          );
+          return;
+        }
+        openProjectPicker(true);
+      }
+
+      function renderProjectPickerList() {
+        const list = document.getElementById("projectPickerList");
+        if (!list) return;
+
+        if (projects.length === 0) {
+          list.innerHTML =
+            '<p class="text-xs text-slate-400 italic">No projects yet — add your first one below.</p>';
+          return;
+        }
+
+        list.innerHTML = projects
+          .map((p) => {
+            const totalHours =
+              logs
+                .filter((l) => l.projectId === p.id)
+                .reduce((sum, l) => sum + (Number(l.netDurationMs) || 0), 0) /
+              (1000 * 60 * 60);
+            return `
+              <button type="button" onclick="selectProject('${p.id}')" class="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl transition text-left">
+                <div>
+                  <div class="text-sm font-semibold text-slate-800">${escapeHtml(p.name)}</div>
+                  <div class="text-xs text-slate-400">${totalHours.toFixed(2)} hrs logged · $${(Number(p.hourlyRate) || 0).toFixed(2)}/hr</div>
+                </div>
+                <i class="fa-solid fa-chevron-right text-slate-300"></i>
+              </button>`;
+          })
+          .join("");
+      }
+
+      function selectProject(id) {
+        const project = projects.find((p) => p.id === id);
+        if (!project) return;
+
+        activeProjectId = id;
+        persistState();
+        closeProjectPicker();
+        renderUI();
+      }
+
+      function handleAddProject(event) {
+        event.preventDefault();
+
+        const name = document.getElementById("newProjectName").value.trim();
+        const rate = parseFloat(
+          document.getElementById("newProjectRate").value,
+        );
+
+        if (!name || isNaN(rate) || rate < 0) {
+          alert("Enter a project name and a valid hourly rate.");
+          return;
+        }
+
+        const project = {
+          id: generateId(),
+          name,
+          hourlyRate: rate,
+          createdAt: new Date().toISOString(),
+        };
+        projects.push(project);
+        activeProjectId = project.id;
+
+        persistState();
+        closeProjectPicker();
+        renderUI();
+      }
+
+      // Keeps the header badge, the "Switch" control, and the (now
+      // per-project) hourly rate input all in sync with whichever project
+      // is active. Called from renderUI() so it stays current after every
+      // state change, not just after switching.
+      function renderProjectBadge() {
+        const nameEl = document.getElementById("activeProjectName");
+        const switchBtn = document.getElementById("switchProjectBtn");
+        const rateInput = document.getElementById("hourlyRate");
+        const rateHint = document.getElementById("rateProjectHint");
+        if (!nameEl || !switchBtn) return;
+
+        const project = getActiveProject();
+        nameEl.textContent = project ? project.name : "No project selected";
+
+        const disabled = !!currentShift;
+        switchBtn.disabled = disabled;
+        switchBtn.title = disabled
+          ? "Clock out before switching projects"
+          : "Switch Project";
+
+        if (rateInput) {
+          rateInput.value = project ? project.hourlyRate : "";
+        }
+        if (rateHint) {
+          rateHint.textContent = project
+            ? `Applies to ${project.name}`
+            : "Select a project to set its rate";
+        }
+      }
+
+      // Invoicing Logic
+      //
+      // Flow: openCreateInvoiceModal() -> loadInvoiceRecordsForRange() picks
+      // matching shifts/expenses -> handleCreateInvoiceSubmit() builds
+      // `invoiceDraft` and opens the editable preview -> every edit in the
+      // preview form re-renders both the totals and a read-only iframe whose
+      // content comes from generateInvoiceHTML(), the exact same function
+      // used to build the PDF, so what's previewed is what gets printed.
+      const INVOICE_I18N = {
+        en: {
+          invoice: "Invoice",
+          billTo: "Bill To",
+          invoiceNumber: "Invoice Number",
+          dateIssued: "Date Issued",
+          date: "Date",
+          description: "Description",
+          hours: "Hours",
+          rate: "Rate",
+          amount: "Amount",
+          workSummary: "Work Summary",
+          expenses: "Expenses",
+          subtotal: "Subtotal",
+          discount: "Discount",
+          total: "Total",
+          notes: "Notes",
+          thankYou: "Thank you for your business",
+          authorizedSignature: "Authorized Signature",
+        },
+        ar: {
+          invoice: "فاتورة",
+          billTo: "إلى",
+          invoiceNumber: "رقم الفاتورة",
+          dateIssued: "تاريخ الإصدار",
+          date: "التاريخ",
+          description: "الوصف",
+          hours: "الساعات",
+          rate: "السعر",
+          amount: "المبلغ",
+          workSummary: "ملخص العمل",
+          expenses: "المصاريف",
+          subtotal: "المجموع الفرعي",
+          discount: "الخصم",
+          total: "الإجمالي",
+          notes: "ملاحظات",
+          thankYou: "شكراً لتعاملكم معنا",
+          authorizedSignature: "التوقيع المعتمد",
+        },
+      };
+
+      // Local id for line items within a single draft (separate from
+      // sourceLogId/sourceExpenseId, which point back at the real records).
+      function generateId() {
+        return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      }
+
+      function escapeHtmlForInvoice(val) {
+        return escapeHtml(val === null || val === undefined ? "" : String(val));
+      }
+
+      // Signature Settings — stored once, reused on every invoice (see
+      // signatureImage in the state block / persistState).
+      const SIGNATURE_MAX_BYTES = 1024 * 1024;
+
+      function handleSignatureUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!["image/png", "image/jpeg"].includes(file.type)) {
+          alert("Please upload a PNG or JPEG image.");
+          event.target.value = "";
+          return;
+        }
+
+        if (file.size > SIGNATURE_MAX_BYTES) {
+          alert(
+            "Signature image is too large (max ~1MB). Please choose a smaller file.",
+          );
+          event.target.value = "";
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          signatureImage = e.target.result;
+          persistState();
+          renderSignatureSettings();
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function removeSignature() {
+        signatureImage = null;
+        persistState();
+        renderSignatureSettings();
+        document.getElementById("signatureFileInput").value = "";
+      }
+
+      function renderSignatureSettings() {
+        const preview = document.getElementById("signaturePreview");
+        const emptyLabel = document.getElementById("signatureEmptyLabel");
+        const removeBtn = document.getElementById("signatureRemoveBtn");
+        if (!preview) return;
+
+        if (signatureImage) {
+          preview.src = signatureImage;
+          preview.classList.remove("hidden");
+          emptyLabel.classList.add("hidden");
+          removeBtn.classList.remove("hidden");
+        } else {
+          preview.classList.add("hidden");
+          preview.src = "";
+          emptyLabel.classList.remove("hidden");
+          removeBtn.classList.add("hidden");
+        }
+      }
+
+      function openCreateInvoiceModal() {
+        const project = getActiveProject();
+        document.getElementById("invBusinessName").value = businessName;
+        // Pre-fills "Bill To" with the active project's name — the user can
+        // still freely retype it, that's just a manual override, not
+        // cross-project data mixing.
+        document.getElementById("invClientDetails").value = project
+          ? project.name
+          : "";
+        document.getElementById("invNumber").value = nextInvoiceNumber;
+        document.getElementById("invDateIssued").value = new Date()
+          .toISOString()
+          .split("T")[0];
+        document.getElementById("invRangeStart").value = "";
+        document.getElementById("invRangeEnd").value = "";
+        document.getElementById("invRecordsPicker").classList.add("hidden");
+        document.getElementById("invShiftChecklist").innerHTML = "";
+        document.getElementById("invExpenseChecklist").innerHTML = "";
+
+        const modal = document.getElementById("createInvoiceModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      }
+
+      function closeCreateInvoiceModal() {
+        const modal = document.getElementById("createInvoiceModal");
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      }
+
+      function loadInvoiceRecordsForRange() {
+        const startVal = document.getElementById("invRangeStart").value;
+        const endVal = document.getElementById("invRangeEnd").value;
+        if (!startVal || !endVal) {
+          alert("Choose a start and end date first.");
+          return;
+        }
+
+        const rangeStart = new Date(`${startVal}T00:00:00`).getTime();
+        const rangeEnd = new Date(`${endVal}T23:59:59`).getTime();
+
+        // Scoped to the active project — an invoice should never pull in
+        // another project's shifts/expenses just because the dates overlap.
+        const matchingLogs = logs.filter((log) => {
+          if (log.projectId !== activeProjectId) return false;
+          const t = new Date(log.startTimeISO || log.date).getTime();
+          return !isNaN(t) && t >= rangeStart && t <= rangeEnd;
+        });
+
+        // expense.date is a locale-formatted string (no ISO field exists on
+        // expense records), so this relies on it being parseable the same
+        // way the rest of the app already assumes (see consolidateDailyLogs).
+        const matchingExpenses = expenses.filter((exp) => {
+          if (exp.projectId !== activeProjectId) return false;
+          const t = new Date(exp.date).getTime();
+          return !isNaN(t) && t >= rangeStart && t <= rangeEnd;
+        });
+
+        const shiftList = document.getElementById("invShiftChecklist");
+        shiftList.innerHTML =
+          matchingLogs.length === 0
+            ? '<p class="text-xs text-slate-400 italic">No shifts in this range.</p>'
+            : matchingLogs
+                .map((log) => {
+                  const hrs = (
+                    (Number(log.netDurationMs) || 0) /
+                    (1000 * 60 * 60)
+                  ).toFixed(2);
+                  return `
+                    <label class="flex items-center gap-2 py-1.5 text-xs text-slate-600">
+                      <input type="checkbox" class="inv-shift-check" value="${log.id}" checked />
+                      <span class="flex-1">${escapeHtml(log.date || "")} — ${hrs} hrs — ${escapeHtml(log.notes || "Normal Shift")}</span>
+                    </label>`;
+                })
+                .join("");
+
+        const expenseList = document.getElementById("invExpenseChecklist");
+        expenseList.innerHTML =
+          matchingExpenses.length === 0
+            ? '<p class="text-xs text-slate-400 italic">No expenses in this range.</p>'
+            : matchingExpenses
+                .map(
+                  (exp) => `
+                    <label class="flex items-center gap-2 py-1.5 text-xs text-slate-600">
+                      <input type="checkbox" class="inv-expense-check" value="${exp.id}" checked />
+                      <span class="flex-1">${escapeHtml(exp.date || "")} — ${escapeHtml(exp.title)} — $${(Number(exp.amount) || 0).toFixed(2)}</span>
+                    </label>`,
+                )
+                .join("");
+
+        document.getElementById("invRecordsPicker").classList.remove("hidden");
+      }
+
+      function handleCreateInvoiceSubmit(event) {
+        event.preventDefault();
+
+        const checkedShiftIds = Array.from(
+          document.querySelectorAll(".inv-shift-check:checked"),
+        ).map((el) => Number(el.value));
+        const checkedExpenseIds = Array.from(
+          document.querySelectorAll(".inv-expense-check:checked"),
+        ).map((el) => Number(el.value));
+
+        const workItems = logs
+          .filter((log) => checkedShiftIds.includes(log.id))
+          .map((log) => ({
+            id: generateId(),
+            sourceLogId: log.id,
+            date: log.date || "",
+            description: log.notes || "Normal Shift",
+            hours: parseFloat(
+              (
+                (Number(log.netDurationMs) || 0) /
+                (1000 * 60 * 60)
+              ).toFixed(2),
+            ),
+            rate: Number(log.hourlyRate) || getActiveRate(),
+          }));
+
+        const expenseItems = expenses
+          .filter((exp) => checkedExpenseIds.includes(exp.id))
+          .map((exp) => ({
+            id: generateId(),
+            sourceExpenseId: exp.id,
+            description: exp.title,
+            amount: Number(exp.amount) || 0,
+          }));
+
+        const invNumber =
+          document.getElementById("invNumber").value.trim() ||
+          String(nextInvoiceNumber);
+
+        invoiceDraft = {
+          savedInvoiceId: null,
+          projectId: activeProjectId,
+          invoiceNumber: invNumber,
+          businessName: document.getElementById("invBusinessName").value.trim(),
+          clientDetails: document
+            .getElementById("invClientDetails")
+            .value.trim(),
+          dateIssued:
+            document.getElementById("invDateIssued").value ||
+            new Date().toISOString().split("T")[0],
+          language: "en",
+          workItems,
+          expenseItems,
+          discount: 0,
+          includeSignature: !!signatureImage,
+        };
+
+        closeCreateInvoiceModal();
+        openInvoicePreview();
+      }
+
+      function computeInvoiceTotals(draft) {
+        const laborSubtotal = draft.workItems.reduce(
+          (sum, item) =>
+            sum + (Number(item.hours) || 0) * (Number(item.rate) || 0),
+          0,
+        );
+        const expensesSubtotal = draft.expenseItems.reduce(
+          (sum, item) => sum + (Number(item.amount) || 0),
+          0,
+        );
+        const subtotal = laborSubtotal + expensesSubtotal;
+        const discount = Number(draft.discount) || 0;
+        const total = Math.max(0, subtotal - discount);
+        return { laborSubtotal, expensesSubtotal, subtotal, discount, total };
+      }
+
+      function buildInvoiceSnapshot(draft) {
+        const totals = computeInvoiceTotals(draft);
+        return {
+          invoiceNumber: draft.invoiceNumber,
+          businessName: draft.businessName,
+          clientDetails: draft.clientDetails,
+          dateIssued: draft.dateIssued,
+          workItems: draft.workItems.map((w) => ({
+            date: w.date,
+            description: w.description,
+            hours: Number(w.hours) || 0,
+            rate: Number(w.rate) || 0,
+            amount: (Number(w.hours) || 0) * (Number(w.rate) || 0),
+          })),
+          expenseItems: draft.expenseItems.map((e) => ({
+            description: e.description,
+            amount: Number(e.amount) || 0,
+          })),
+          laborSubtotal: totals.laborSubtotal,
+          expensesSubtotal: totals.expensesSubtotal,
+          discount: totals.discount,
+          total: totals.total,
+          // The signature image itself is stored once in settings, not per
+          // draft — only whether to include it is per-invoice.
+          signatureImage: draft.includeSignature ? signatureImage : null,
+        };
+      }
+
+      function openInvoicePreview() {
+        if (!invoiceDraft) return;
+
+        document.getElementById("pvBusinessName").value =
+          invoiceDraft.businessName;
+        document.getElementById("pvClientDetails").value =
+          invoiceDraft.clientDetails;
+        document.getElementById("pvInvoiceNumber").value =
+          invoiceDraft.invoiceNumber;
+        document.getElementById("pvDateIssued").value = invoiceDraft.dateIssued;
+        document.getElementById("pvDiscount").value = invoiceDraft.discount;
+
+        const sigWrap = document.getElementById("pvSignatureToggleWrap");
+        if (signatureImage) {
+          sigWrap.classList.remove("hidden");
+          document.getElementById("pvIncludeSignature").checked =
+            !!invoiceDraft.includeSignature;
+        } else {
+          sigWrap.classList.add("hidden");
+        }
+
+        setInvoiceLanguage(invoiceDraft.language || "en");
+
+        const modal = document.getElementById("invoicePreviewModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      }
+
+      function updateInvoiceSignatureToggle(checked) {
+        invoiceDraft.includeSignature = checked;
+        renderInvoiceEditor();
+      }
+
+      function closeInvoicePreviewModal() {
+        const modal = document.getElementById("invoicePreviewModal");
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      }
+
+      function renderInvoiceEditor() {
+        if (!invoiceDraft) return;
+
+        const workBody = document.getElementById("pvWorkItemsBody");
+        workBody.innerHTML = invoiceDraft.workItems
+          .map((item) => {
+            const amount = (
+              (Number(item.hours) || 0) * (Number(item.rate) || 0)
+            ).toFixed(2);
+            return `
+              <tr>
+                <td class="px-2 py-1.5"><input type="text" value="${escapeHtml(item.date)}" oninput="updateWorkItem('${item.id}','date',this.value)" class="w-24 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5"><input type="text" value="${escapeHtml(item.description)}" oninput="updateWorkItem('${item.id}','description',this.value)" class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5"><input type="number" step="0.01" min="0" value="${item.hours}" oninput="updateWorkItem('${item.id}','hours',this.value)" class="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5"><input type="number" step="0.01" min="0" value="${item.rate}" oninput="updateWorkItem('${item.id}','rate',this.value)" class="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap">$${amount}</td>
+                <td class="px-2 py-1.5 text-right"><button type="button" onclick="removeWorkItem('${item.id}')" class="text-slate-400 hover:text-rose-600"><i class="fa-solid fa-xmark"></i></button></td>
+              </tr>`;
+          })
+          .join("");
+
+        const expenseBody = document.getElementById("pvExpenseItemsBody");
+        expenseBody.innerHTML = invoiceDraft.expenseItems
+          .map(
+            (item) => `
+              <tr>
+                <td class="px-2 py-1.5"><input type="text" value="${escapeHtml(item.description)}" oninput="updateExpenseItem('${item.id}','description',this.value)" class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5"><input type="number" step="0.01" min="0" value="${item.amount}" oninput="updateExpenseItem('${item.id}','amount',this.value)" class="w-24 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5 text-right"><button type="button" onclick="removeExpenseItem('${item.id}')" class="text-slate-400 hover:text-rose-600"><i class="fa-solid fa-xmark"></i></button></td>
+              </tr>`,
+          )
+          .join("");
+
+        const totals = computeInvoiceTotals(invoiceDraft);
+        document.getElementById("pvLaborSubtotal").textContent =
+          `$${totals.laborSubtotal.toFixed(2)}`;
+        document.getElementById("pvExpensesSubtotal").textContent =
+          `$${totals.expensesSubtotal.toFixed(2)}`;
+        document.getElementById("pvGrandTotal").textContent =
+          `$${totals.total.toFixed(2)}`;
+
+        renderInvoiceLivePreview();
+      }
+
+      function updateWorkItem(id, field, value) {
+        const item = invoiceDraft.workItems.find((w) => w.id === id);
+        if (!item) return;
+        item[field] = field === "hours" || field === "rate"
+          ? parseFloat(value) || 0
+          : value;
+        renderInvoiceEditor();
+      }
+
+      function removeWorkItem(id) {
+        invoiceDraft.workItems = invoiceDraft.workItems.filter(
+          (w) => w.id !== id,
+        );
+        renderInvoiceEditor();
+      }
+
+      function updateExpenseItem(id, field, value) {
+        const item = invoiceDraft.expenseItems.find((e) => e.id === id);
+        if (!item) return;
+        item[field] = field === "amount" ? parseFloat(value) || 0 : value;
+        renderInvoiceEditor();
+      }
+
+      function removeExpenseItem(id) {
+        invoiceDraft.expenseItems = invoiceDraft.expenseItems.filter(
+          (e) => e.id !== id,
+        );
+        renderInvoiceEditor();
+      }
+
+      function addManualLineItem() {
+        invoiceDraft.expenseItems.push({
+          id: generateId(),
+          sourceExpenseId: null,
+          description: "New line item",
+          amount: 0,
+        });
+        renderInvoiceEditor();
+      }
+
+      function updateInvoiceDiscount(value) {
+        invoiceDraft.discount = parseFloat(value) || 0;
+        renderInvoiceEditor();
+      }
+
+      function setInvoiceLanguage(lang) {
+        invoiceDraft.language = lang;
+        [
+          ["pvLangEnBtn", "en"],
+          ["pvLangArBtn", "ar"],
+        ].forEach(([btnId, code]) => {
+          const btn = document.getElementById(btnId);
+          const active = code === lang;
+          btn.classList.toggle("bg-indigo-600", active);
+          btn.classList.toggle("text-white", active);
+          btn.classList.toggle("bg-slate-100", !active);
+          btn.classList.toggle("text-slate-600", !active);
+        });
+        renderInvoiceEditor();
+      }
+
+      // Pulls the current header input values into invoiceDraft, then
+      // rebuilds the read-only iframe from generateInvoiceHTML() so it
+      // always mirrors exactly what Export PDF will produce.
+      function renderInvoiceLivePreview() {
+        if (!invoiceDraft) return;
+
+        invoiceDraft.businessName =
+          document.getElementById("pvBusinessName").value;
+        invoiceDraft.clientDetails =
+          document.getElementById("pvClientDetails").value;
+        invoiceDraft.invoiceNumber =
+          document.getElementById("pvInvoiceNumber").value;
+        invoiceDraft.dateIssued = document.getElementById("pvDateIssued").value;
+
+        const snapshot = buildInvoiceSnapshot(invoiceDraft);
+        const html = generateInvoiceHTML(snapshot, invoiceDraft.language);
+        document.getElementById("invoicePreviewFrame").srcdoc = html;
+      }
+
+      // Builds the fully self-contained invoice document (inline styles, no
+      // CDN dependency) used for BOTH the on-screen iframe preview and the
+      // PDF export, so what's previewed is exactly what gets printed.
+      function generateInvoiceHTML(invoiceData, lang) {
+        const t = INVOICE_I18N[lang] || INVOICE_I18N.en;
+        const isRTL = lang === "ar";
+        const dir = isRTL ? "rtl" : "ltr";
+
+        // Column order in the markup below is always the natural
+        // date->description->...->amount sequence, in BOTH languages. CSS
+        // table layout automatically reverses visual column order when
+        // `direction: rtl` applies (inherited here from <html dir="rtl">) —
+        // that's the actual mechanism that flips columns for Arabic. Manually
+        // reversing this array as well would double-flip it back to the
+        // wrong (LTR) order while dir="rtl" is active.
+        const workHeaders = [t.date, t.description, t.hours, t.rate, t.amount]
+          .map((h) => `<th>${escapeHtmlForInvoice(h)}</th>`)
+          .join("");
+
+        const workRows = invoiceData.workItems
+          .map((item) => {
+            const cells = [
+              escapeHtmlForInvoice(item.date),
+              escapeHtmlForInvoice(item.description),
+              item.hours.toFixed(2),
+              `$${item.rate.toFixed(2)}`,
+              `$${item.amount.toFixed(2)}`,
+            ];
+            return `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+          })
+          .join("");
+
+        const expenseHeaders = [t.description, t.amount]
+          .map((h) => `<th>${escapeHtmlForInvoice(h)}</th>`)
+          .join("");
+
+        const expenseRows = invoiceData.expenseItems
+          .map((item) => {
+            const cells = [
+              escapeHtmlForInvoice(item.description),
+              `$${item.amount.toFixed(2)}`,
+            ];
+            return `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+          })
+          .join("");
+
+        const workSection = invoiceData.workItems.length
+          ? `
+            <h2>${escapeHtmlForInvoice(t.workSummary)}</h2>
+            <table class="items" dir="${dir}">
+              <thead><tr>${workHeaders}</tr></thead>
+              <tbody>${workRows}</tbody>
+            </table>`
+          : "";
+
+        const expenseSection = invoiceData.expenseItems.length
+          ? `
+            <h2>${escapeHtmlForInvoice(t.expenses)}</h2>
+            <table class="items" dir="${dir}">
+              <thead><tr>${expenseHeaders}</tr></thead>
+              <tbody>${expenseRows}</tbody>
+            </table>`
+          : "";
+
+        // signatureImage is the raw base64 data URL (not user-authored
+        // text), so it's inserted directly rather than through
+        // escapeHtmlForInvoice — same precedent as the existing expense
+        // attachment viewer (viewAttachment) elsewhere in this file.
+        const signatureSection = invoiceData.signatureImage
+          ? `
+            <div class="signature-block">
+              <div><img src="${invoiceData.signatureImage}" alt="${escapeHtmlForInvoice(t.authorizedSignature)}" /></div>
+              <div class="signature-line"></div>
+              <div class="signature-label">${escapeHtmlForInvoice(t.authorizedSignature)}</div>
+            </div>`
+          : "";
+
+        return `<!doctype html>
+<html lang="${lang}" dir="${dir}">
+<head>
+<meta charset="UTF-8" />
+<title>${escapeHtmlForInvoice(t.invoice)} ${escapeHtmlForInvoice(invoiceData.invoiceNumber)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    color: #1e293b;
+    margin: 0;
+    padding: 40px;
+    direction: ${dir};
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 3px solid #4f46e5;
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+  }
+  .header h1 { font-size: 26px; margin: 0 0 4px 0; color: #4f46e5; }
+  .business-name { font-size: 15px; font-weight: 600; color: #334155; }
+  .meta { text-align: ${isRTL ? "left" : "right"}; font-size: 12px; color: #64748b; }
+  .meta div { margin-bottom: 4px; }
+  .bill-to { margin-bottom: 28px; }
+  .bill-to .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    margin-bottom: 4px;
+  }
+  .bill-to .details { font-size: 13px; color: #334155; white-space: pre-line; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #4f46e5;
+    margin: 24px 0 10px 0;
+  }
+  table.items { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 8px; }
+  table.items th {
+    background: #f1f5f9;
+    color: #64748b;
+    text-transform: uppercase;
+    font-size: 10px;
+    padding: 8px 10px;
+    text-align: ${isRTL ? "right" : "left"};
+    border-bottom: 1px solid #e2e8f0;
+  }
+  table.items td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: ${isRTL ? "right" : "left"};
+  }
+  .totals {
+    margin-top: 20px;
+    width: 280px;
+    /* LTR: pinned right (margin-left auto pushes it flush right).
+       RTL: mirrored to the left, matching .signature-block's flip. */
+    margin-left: ${isRTL ? "0" : "auto"};
+    margin-right: ${isRTL ? "auto" : "0"};
+    font-size: 13px;
+  }
+  .totals .row { display: flex; justify-content: space-between; padding: 6px 0; color: #475569; }
+  .totals .grand {
+    border-top: 2px solid #4f46e5;
+    margin-top: 6px;
+    padding-top: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #1e293b;
+  }
+  .signature-block {
+    margin-top: 40px;
+    /* Mirrors to the same side the rest of the RTL layout reads from,
+       instead of staying pinned to one physical side in both languages. */
+    text-align: ${isRTL ? "right" : "left"};
+  }
+  .signature-block img {
+    max-height: 70px;
+    max-width: 220px;
+    object-fit: contain;
+  }
+  .signature-line {
+    display: inline-block;
+    width: 220px;
+    border-top: 1px solid #94a3b8;
+    margin-top: 6px;
+  }
+  .signature-label {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+  .footer {
+    margin-top: 48px;
+    text-align: center;
+    font-size: 12px;
+    color: #94a3b8;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 16px;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>${escapeHtmlForInvoice(t.invoice)}</h1>
+      <div class="business-name">${escapeHtmlForInvoice(invoiceData.businessName)}</div>
+    </div>
+    <div class="meta">
+      <div><strong>${escapeHtmlForInvoice(t.invoiceNumber)}:</strong> ${escapeHtmlForInvoice(invoiceData.invoiceNumber)}</div>
+      <div><strong>${escapeHtmlForInvoice(t.dateIssued)}:</strong> ${escapeHtmlForInvoice(invoiceData.dateIssued)}</div>
+    </div>
+  </div>
+
+  <div class="bill-to">
+    <div class="label">${escapeHtmlForInvoice(t.billTo)}</div>
+    <div class="details">${escapeHtmlForInvoice(invoiceData.clientDetails)}</div>
+  </div>
+
+  ${workSection}
+  ${expenseSection}
+
+  <div class="totals">
+    <div class="row"><span>${escapeHtmlForInvoice(t.subtotal)}</span><span>$${(invoiceData.laborSubtotal + invoiceData.expensesSubtotal).toFixed(2)}</span></div>
+    <div class="row"><span>${escapeHtmlForInvoice(t.discount)}</span><span>-$${invoiceData.discount.toFixed(2)}</span></div>
+    <div class="row grand"><span>${escapeHtmlForInvoice(t.total)}</span><span>$${invoiceData.total.toFixed(2)}</span></div>
+  </div>
+
+  ${signatureSection}
+
+  <div class="footer">${escapeHtmlForInvoice(t.thankYou)}</div>
+</body>
+</html>`;
+      }
+
+      async function exportInvoiceToPDF() {
+        if (!invoiceDraft) return;
+        if (!window.invoiceAPI || typeof window.invoiceAPI.exportPDF !== "function") {
+          alert("PDF export isn't available — try restarting the app.");
+          return;
+        }
+
+        renderInvoiceLivePreview(); // ensure latest header edits are captured
+
+        const snapshot = buildInvoiceSnapshot(invoiceDraft);
+        const html = generateInvoiceHTML(snapshot, invoiceDraft.language);
+        const suggestedFileName = `Invoice-${invoiceDraft.invoiceNumber || "draft"}.pdf`;
+
+        const exportBtn = document.getElementById("pvExportBtn");
+        exportBtn.disabled = true;
+        const originalLabel = exportBtn.innerHTML;
+        exportBtn.innerHTML = "Exporting...";
+
+        try {
+          const result = await window.invoiceAPI.exportPDF(
+            html,
+            suggestedFileName,
+          );
+
+          if (!result.success) {
+            if (result.error !== "canceled") {
+              alert(`PDF export failed: ${result.error || "Unknown error"}`);
+            }
+            return;
+          }
+
+          saveInvoiceRecord(snapshot);
+          alert(`Invoice exported to:\n${result.filePath}`);
+        } catch (err) {
+          alert(`PDF export failed: ${err.message}`);
+        } finally {
+          exportBtn.disabled = false;
+          exportBtn.innerHTML = originalLabel;
+        }
+      }
+
+      function saveInvoiceRecord(snapshot) {
+        const now = new Date().toISOString();
+        const enteredNumber = parseInt(invoiceDraft.invoiceNumber, 10);
+        const existingIdx = invoiceDraft.savedInvoiceId
+          ? invoices.findIndex((inv) => inv.id === invoiceDraft.savedInvoiceId)
+          : -1;
+
+        const record = {
+          id: invoiceDraft.savedInvoiceId || Date.now(),
+          projectId: invoiceDraft.projectId || activeProjectId,
+          invoiceNumber: invoiceDraft.invoiceNumber,
+          clientDetails: invoiceDraft.clientDetails,
+          businessName: invoiceDraft.businessName,
+          dateIssued: invoiceDraft.dateIssued,
+          language: invoiceDraft.language,
+          lineItems: [
+            ...snapshot.workItems.map((w) => ({ type: "work", ...w })),
+            ...snapshot.expenseItems.map((e) => ({ type: "expense", ...e })),
+          ],
+          discount: snapshot.discount,
+          subtotal: snapshot.laborSubtotal + snapshot.expensesSubtotal,
+          total: snapshot.total,
+          // Only the on/off choice is saved, never the image itself — it
+          // stays stored once in settings (signatureImage) and is resolved
+          // fresh whenever this invoice is reopened or re-exported.
+          includeSignature: !!invoiceDraft.includeSignature,
+          createdAt: existingIdx !== -1 ? invoices[existingIdx].createdAt : now,
+          updatedAt: now,
+        };
+
+        if (existingIdx !== -1) {
+          invoices[existingIdx] = record;
+        } else {
+          invoices.unshift(record);
+          invoiceDraft.savedInvoiceId = record.id;
+        }
+
+        if (!isNaN(enteredNumber)) {
+          nextInvoiceNumber = Math.max(nextInvoiceNumber, enteredNumber + 1);
+        }
+        businessName = invoiceDraft.businessName;
+
+        persistState();
+        renderInvoiceHistory();
+      }
+
+      // Scoped to the active project, same as the shift/expense tables —
+      // otherwise switching projects would still show another client's
+      // invoice history, which defeats the point of separating them.
+      function renderInvoiceHistory() {
+        const tbody = document.getElementById("invoiceHistoryBody");
+        const emptyState = document.getElementById("emptyInvoiceState");
+        if (!tbody || !emptyState) return;
+
+        const activeInvoices = invoices.filter(
+          (inv) => inv.projectId === activeProjectId,
+        );
+
+        tbody.innerHTML = "";
+
+        if (activeInvoices.length === 0) {
+          emptyState.classList.remove("hidden");
+          return;
+        }
+        emptyState.classList.add("hidden");
+
+        activeInvoices.forEach((inv) => {
+          const clientFirstLine = (inv.clientDetails || "").split("\n")[0] || "—";
+          const tr = document.createElement("tr");
+          tr.className = "hover:bg-slate-50/80 transition";
+          tr.innerHTML = `
+            <td class="px-6 py-4 font-medium text-slate-800 whitespace-nowrap">#${escapeHtml(String(inv.invoiceNumber))}</td>
+            <td class="px-6 py-4 text-slate-600">${escapeHtml(clientFirstLine)}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${escapeHtml(inv.dateIssued || "")}</td>
+            <td class="px-6 py-4 font-semibold text-emerald-600 whitespace-nowrap">$${(Number(inv.total) || 0).toFixed(2)}</td>
+            <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 py-1 text-xs rounded-lg font-medium bg-slate-100 text-slate-600">${inv.language === "ar" ? "AR" : "EN"}</span></td>
+            <td class="px-6 py-4 text-right whitespace-nowrap">
+              <div class="flex items-center justify-end gap-1">
+                <button onclick="reopenInvoice(${inv.id})" class="text-slate-400 hover:text-indigo-600 transition px-2 py-1" title="Reopen Invoice">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                </button>
+                <button onclick="deleteInvoice(${inv.id})" class="text-slate-400 hover:text-rose-600 transition px-2 py-1" title="Delete Invoice">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      function reopenInvoice(id) {
+        const inv = invoices.find((i) => i.id === id);
+        if (!inv) return;
+
+        invoiceDraft = {
+          savedInvoiceId: inv.id,
+          projectId: inv.projectId || activeProjectId,
+          invoiceNumber: inv.invoiceNumber,
+          businessName: inv.businessName || businessName,
+          clientDetails: inv.clientDetails || "",
+          dateIssued: inv.dateIssued,
+          language: inv.language || "en",
+          workItems: inv.lineItems
+            .filter((li) => li.type === "work")
+            .map((li) => ({
+              id: generateId(),
+              sourceLogId: null,
+              date: li.date,
+              description: li.description,
+              hours: Number(li.hours) || 0,
+              rate: Number(li.rate) || 0,
+            })),
+          expenseItems: inv.lineItems
+            .filter((li) => li.type === "expense")
+            .map((li) => ({
+              id: generateId(),
+              sourceExpenseId: null,
+              description: li.description,
+              amount: Number(li.amount) || 0,
+            })),
+          discount: Number(inv.discount) || 0,
+          // Older saved invoices (before this feature existed) won't have
+          // this field — fall back to whatever's currently stored.
+          includeSignature:
+            inv.includeSignature !== undefined
+              ? inv.includeSignature
+              : !!signatureImage,
+        };
+
+        openInvoicePreview();
+      }
+
+      function deleteInvoice(id) {
+        invoices = invoices.filter((inv) => inv.id !== id);
+        persistState();
+        renderInvoiceHistory();
       }
 
       // Export & Import Data Features
@@ -1451,6 +3207,12 @@
               currentShift,
               logs,
               expenses,
+              invoices,
+              nextInvoiceNumber,
+              businessName,
+              signatureImage,
+              projects,
+              activeProjectId,
             }),
           );
         } catch (e) {}
@@ -1460,9 +3222,13 @@
       // hourlyRate input's onchange calls saveRate() directly) but now just persist the
       // whole envelope, so callers no longer need to know which key backs which field.
       function saveRate() {
-        hourlyRate =
-          parseFloat(document.getElementById("hourlyRate").value) || 20.0;
-        persistState();
+        const project = getActiveProject();
+        const value =
+          parseFloat(document.getElementById("hourlyRate").value) || 0;
+        if (project) {
+          project.hourlyRate = value;
+          persistState();
+        }
         renderStats();
         renderLogsTable();
       }
@@ -1503,6 +3269,43 @@
         });
       }
 
+      // v2 -> v3: introduces multi-project support. Existing users have one
+      // undifferentiated set of shifts/expenses/invoices under the old
+      // global hourlyRate — fold all of it into a single default project
+      // ("Almurooj School") so nothing is lost, then everything going
+      // forward is scoped by projectId. Called from exactly two gated call
+      // sites below (each only reachable once per install), so this itself
+      // doesn't need its own re-entrancy guard.
+      function migrateToProjectModel() {
+        const defaultProject = {
+          id: generateId(),
+          name: "Almurooj School",
+          hourlyRate: hourlyRate,
+          createdAt: new Date().toISOString(),
+        };
+        projects = [defaultProject];
+        activeProjectId = defaultProject.id;
+
+        logs = logs.map((log) => ({
+          ...log,
+          projectId: log.projectId || defaultProject.id,
+        }));
+        expenses = expenses.map((exp) => ({
+          ...exp,
+          projectId: exp.projectId || defaultProject.id,
+        }));
+        invoices = invoices.map((inv) => ({
+          ...inv,
+          projectId: inv.projectId || defaultProject.id,
+        }));
+        if (currentShift) {
+          currentShift = {
+            ...currentShift,
+            projectId: currentShift.projectId || defaultProject.id,
+          };
+        }
+      }
+
       // One-time upgrade path for data written before STORAGE_KEY existed (four
       // separate wt_* keys). Folds them into the versioned envelope, then removes them
       // so this only ever runs once per install.
@@ -1511,6 +3314,12 @@
         const legacyShift = localStorage.getItem("wt_active_shift");
         const legacyLogs = localStorage.getItem("wt_shift_logs");
         const legacyExpenses = localStorage.getItem("wt_expenses");
+        const hadLegacyData = !!(
+          legacyRate ||
+          legacyShift ||
+          legacyLogs ||
+          legacyExpenses
+        );
 
         if (legacyRate) hourlyRate = parseFloat(legacyRate) || 20.0;
 
@@ -1536,6 +3345,14 @@
           } catch (e) {}
         }
 
+        // Only an install with real pre-v1 data needs a default project
+        // created for it — a genuinely fresh install (nothing in any
+        // legacy key either) should start with zero projects so the
+        // picker's "Add New Project" flow is what creates the first one.
+        if (hadLegacyData) {
+          migrateToProjectModel();
+        }
+
         persistState();
         [
           "wt_hourly_rate",
@@ -1553,16 +3370,52 @@
             migrateLegacyKeys();
           } else {
             const parsed = JSON.parse(raw);
-            // parsed.schemaVersion is available here for future migrations, e.g.:
-            // if (parsed.schemaVersion < 2) { ...upgrade shape... }
+            const storedVersion = Number(parsed.schemaVersion) || 1;
+
             hourlyRate = parseFloat(parsed.hourlyRate) || 20.0;
             currentShift = normalizeShift(parsed.currentShift);
             logs = normalizeLogs(parsed.logs);
             expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
             consolidateDailyLogs();
-          }
 
-          document.getElementById("hourlyRate").value = hourlyRate;
+            // v1 -> v2: added invoicing. Old state objects simply lack these
+            // fields, so default them in here and persist once below to
+            // stamp the envelope as schemaVersion 2 without touching
+            // anything else that was already stored.
+            invoices = Array.isArray(parsed.invoices) ? parsed.invoices : [];
+            nextInvoiceNumber = Number.isFinite(parsed.nextInvoiceNumber)
+              ? parsed.nextInvoiceNumber
+              : 1;
+            businessName =
+              typeof parsed.businessName === "string"
+                ? parsed.businessName
+                : "";
+            // Added alongside v2 but needs no version bump of its own — a
+            // missing field on old state objects just defaults to null,
+            // same as a user who's never uploaded a signature.
+            signatureImage =
+              typeof parsed.signatureImage === "string"
+                ? parsed.signatureImage
+                : null;
+
+            // v2 -> v3: added multi-project support. Reaching this branch
+            // at all means a wt_state envelope already existed, so this is
+            // unconditionally an "existing user" — even one with zero
+            // history yet still gets a (possibly empty) default project.
+            projects = Array.isArray(parsed.projects) ? parsed.projects : [];
+            activeProjectId =
+              typeof parsed.activeProjectId === "string"
+                ? parsed.activeProjectId
+                : null;
+
+            if (storedVersion < 3) {
+              migrateToProjectModel();
+            }
+
+            if (storedVersion < SCHEMA_VERSION) {
+              persistState();
+            }
+          }
         } catch (e) {
           console.error("Error loading stored data:", e);
         }

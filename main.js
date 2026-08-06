@@ -1,6 +1,7 @@
 ﻿/* STREAMING_CHUNK:Defining Electron main process window management */
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 let win = null;
 let tray = null;
@@ -15,7 +16,8 @@ minHeight: 600,
 icon: path.join(__dirname, 'icon.png'),
 webPreferences: {
 nodeIntegration: false,
-contextIsolation: true
+contextIsolation: true,
+preload: path.join(__dirname, 'preload.js')
 }
 });
 
@@ -83,6 +85,55 @@ win.focus();
 }
 });
 }
+
+// Renders a fully self-contained invoice HTML string to PDF via a hidden,
+// offscreen window (the renderer has no filesystem/print access under
+// contextIsolation), then writes it to a path the user picks.
+ipcMain.handle('export-invoice-pdf', async (event, { html, suggestedFileName }) => {
+const { canceled, filePath } = await dialog.showSaveDialog(win, {
+title: 'Export Invoice PDF',
+defaultPath: suggestedFileName || 'Invoice.pdf',
+filters: [{ name: 'PDF Documents', extensions: ['pdf'] }]
+});
+
+if (canceled || !filePath) {
+return { success: false, error: 'canceled' };
+}
+
+const tempHtmlPath = path.join(app.getPath('temp'), `worklogpro-invoice-${Date.now()}.html`);
+let pdfWin = null;
+
+try {
+fs.writeFileSync(tempHtmlPath, html, 'utf-8');
+
+pdfWin = new BrowserWindow({
+show: false,
+webPreferences: {
+nodeIntegration: false,
+contextIsolation: true
+}
+});
+
+// loadFile's promise resolves after did-finish-load, so the page (and its
+// inline styles/content) is fully ready before we print it.
+await pdfWin.loadFile(tempHtmlPath);
+
+const pdfBuffer = await pdfWin.webContents.printToPDF({
+printBackground: true,
+pageSize: 'A4',
+margins: { top: 0, bottom: 0, left: 0, right: 0 }
+});
+
+await fs.promises.writeFile(filePath, pdfBuffer);
+
+return { success: true, filePath };
+} catch (err) {
+return { success: false, error: err.message };
+} finally {
+if (pdfWin) pdfWin.destroy();
+fs.unlink(tempHtmlPath, () => {});
+}
+});
 
 app.whenReady().then(() => {
 createWindow();
