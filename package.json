@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Employee Time & Break Tracker",
   "author": "Your Name",
-  "main": "main.js",
+  "main": "platform-electron/main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win"

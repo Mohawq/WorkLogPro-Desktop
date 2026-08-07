@@ -1,4 +1,4 @@
-﻿/* STREAMING_CHUNK:Defining Electron main process window management */
+/* STREAMING_CHUNK:Defining Electron main process window management */
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -13,7 +13,7 @@ width: 1100,
 height: 800,
 minWidth: 800,
 minHeight: 600,
-icon: path.join(__dirname, 'icon.png'),
+icon: path.join(__dirname, '..', 'icon.png'),
 webPreferences: {
 nodeIntegration: false,
 contextIsolation: true,
@@ -24,8 +24,8 @@ preload: path.join(__dirname, 'preload.js')
 // Remove top menu bar for a clean desktop app look
 win.setMenuBarVisibility(false);
 
-// Load the single HTML file
-win.loadFile('index.html');
+// Load the platform shell (loads core/*.js, then defines window.platformAdapter)
+win.loadFile(path.join(__dirname, 'shell.html'));
 
 // Intercept the close (X) button click
 win.on('close', (event) => {
@@ -38,7 +38,7 @@ return false;
 }
 
 function createTray() {
-let iconPath = path.join(__dirname, 'icon.png');
+let iconPath = path.join(__dirname, '..', 'icon.png');
 let icon;
 
 try {

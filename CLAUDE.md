@@ -5,7 +5,7 @@
 WorkLog Pro Desktop is an Electron-based desktop application for tracking employee shift hours, managing daily time cards, logging reimbursable expenses, and generating client invoices — across multiple projects/customers, each tracked separately.
 
 - **Core Stack**: Electron, Vanilla JavaScript, HTML5, Tailwind CSS (CDN), FontAwesome icons.
-- **Architecture Style**: Single-file frontend architecture (`index.html` holds UI layout, styling, and application logic) coupled with an Electron main process (`main.js`) and a minimal preload bridge (`preload.js`) for PDF export.
+- **Architecture Style**: Split into a platform-agnostic `core/` layer (business logic, state, and rendering) and a thin `platform-electron/` shell (Electron main process, preload IPC bridge, and the HTML shell that loads `core/`). This split exists specifically so a future web/PWA shell can reuse `core/` unchanged — see section 4A.
 
 ## 2. Quick Reference Commands
 
@@ -22,30 +22,60 @@ WorkLog Pro Desktop is an Electron-based desktop application for tracking employ
 - `graphify affected "<file>"` — Lists all dependent functions/modules affected by changes to a file.
 - `graphify god-nodes` — Lists key architectural hub nodes in the graph.
 
-**Coverage caveat**: see Rule 1 in section 5 — the graph does not index anything inside `index.html`.
+**Coverage caveat**: see Rule 1 in section 5 — `core/*.js` and `platform-electron/*.js` **are** indexed now (they're real `.js` files); the deprecated `index.html` and `shell.html`'s markup are not, but neither has meaningful logic left to index.
 
 ## 3. Project Structure & Key Files
 
 ```
 WorkLogPro-Desktop/
-├── index.html            # Main UI layout, styles, and full JS frontend logic
-├── main.js               # Electron main process (window management, system tray, PDF export IPC)
-├── preload.js             # contextBridge bridge exposing window.invoiceAPI.exportPDF to the renderer
-├── package.json          # App metadata, npm scripts, and electron dependencies
-├── icon.png               # Application icon for system tray and window
-└── graphify-out/          # Generated knowledge graph artifacts (does not cover index.html — see section 5)
-    ├── graph.json          # Machine-readable AST index used by Claude Code
-    ├── graph.html           # Interactive visual dependency graph
-    └── GRAPH_REPORT.md      # Summary of detected communities & architecture
+├── core/                    # Platform-agnostic business logic & rendering — shared by every shell
+│   ├── state.js               # wt_state shape, SCHEMA_VERSION, migrations, generateId()/getMsTimestamp()
+│   ├── storage.js              # persistState()/loadStoredData(), backup/restore (still localStorage)
+│   ├── i18n.js                  # EN/AR invoice strings (INVOICE_I18N)
+│   ├── projects.js               # Multi-project state, picker/switch flow, per-project rate editing
+│   ├── shift-tracking.js          # Clock in/out, break start/end/adjust, timer display
+│   ├── invoicing.js                # Invoice creation, editable preview, generateInvoiceHTML(), PDF export, signature — largest core file
+│   └── ui.js                        # Shared render functions, expense/log CRUD, DOMContentLoaded bootstrap
+├── platform-electron/       # Electron-specific shell — the only place platform-specific wiring lives
+│   ├── main.js                # Electron main process (window management, system tray, PDF export IPC)
+│   ├── preload.js               # contextBridge bridge exposing window.invoiceAPI.exportPDF to the renderer
+│   └── shell.html                # Loads every core/*.js file, holds the app markup, defines window.platformAdapter
+├── index.html                # DEPRECATED — unused rollback reference, scheduled for deletion. Do not edit.
+├── package.json              # App metadata, npm scripts, electron dependencies ("main": "platform-electron/main.js")
+├── icon.png                   # Application icon for system tray and window
+└── graphify-out/              # Generated knowledge graph artifacts (covers core/ + platform-electron/*.js — see section 5)
+    ├── graph.json              # Machine-readable AST index used by Claude Code
+    ├── graph.html               # Interactive visual dependency graph
+    └── GRAPH_REPORT.md          # Summary of detected communities & architecture
 ```
 
 ## 4. Key Application Logic & Architecture Principles
 
-### A. Single-File Frontend Principle
+### A. Core / Platform Split
 
-All HTML markup, embedded JavaScript logic, and Tailwind CSS utility classes reside strictly inside `index.html`. Do not create separate `.js` or `.css` files for the web frontend unless explicitly requested. `preload.js` is the one sanctioned exception — it's Electron main-process plumbing (same category as `main.js`), not frontend UI code.
+The app is split into a shared `core/` layer (platform-agnostic business logic and UI rendering) and `platform-electron/` (the Electron-specific shell and main process).
 
-### B. Core Functions (index.html)
+**`core/`** — no file here may reference `window.invoiceAPI` or any other Electron API directly. All platform-specific calls go through `window.platformAdapter`, defined once by whichever shell loads `core/`:
+
+- `state.js` — `wt_state` shape, `SCHEMA_VERSION`, migrations, `generateId()`/`getMsTimestamp()` utilities.
+- `storage.js` — `persistState()`/`loadStoredData()`, backup/restore (`exportData()`/`importData()`).
+- `i18n.js` — EN/AR strings (`INVOICE_I18N`).
+- `projects.js` — multi-project state, picker/switch logic, per-project rate editing.
+- `shift-tracking.js` — clock in/out, break start/end/adjust, timer display logic.
+- `invoicing.js` — invoice creation, editable preview, PDF HTML generation, and signature handling. The largest core file.
+- `ui.js` — shared render/DOM update functions, expense/log CRUD, and the `DOMContentLoaded` bootstrap.
+
+**`platform-electron/`** — the only place platform-specific wiring is allowed to live:
+
+- `main.js` — Electron main process.
+- `preload.js` — IPC bridge, exposes `window.invoiceAPI`.
+- `shell.html` — loads every `core/*.js` file (in dependency order: `state → storage → i18n → projects → shift-tracking → invoicing → ui`), holds the app's HTML markup (byte-identical to the old `index.html`'s), and defines `window.platformAdapter`, which wraps `window.invoiceAPI` calls.
+
+This split exists so a future `platform-web/` shell (a PWA — **not yet built**) can load the exact same `core/*.js` files, define its own `window.platformAdapter` (backed by Supabase sync and a service worker instead of Electron IPC), and reuse all of the business logic with zero changes to `core/`.
+
+**Old `index.html`** still exists at the project root but is **unused and deprecated** — kept temporarily as a rollback reference in case the split needs to be reverted, scheduled for deletion once the split is confirmed stable in production use. Do not edit it or add features to it; add new logic to the appropriate `core/*.js` file instead.
+
+### B. Core Functions
 
 - `consolidateDailyLogs()`: Groups and merges multiple work sessions on the same calendar day into a single daily shift entry. Runs over the full flat `logs[]` array across **all** projects, so it groups by a composite `projectId + date` key, not date alone — grouping by date alone would silently merge two different projects' shifts that happen to fall on the same day.
 - `renderUI()`: Central re-render entry point — refreshes the clock status badge, the project badge, logs/expenses tables, stats, invoice history, and signature settings. Call this (or the more specific render function) after any state mutation.
@@ -90,7 +120,7 @@ All state lives under a **single** `localStorage` key, `wt_state` (constant `STO
 
 **Editable preview**: the preview modal is a real editable form (`renderInvoiceEditor()` renders inline-editable work/expense line items, a manual "add line item" option, and a discount field) bound to `invoiceDraft`. Every edit calls `renderInvoiceLivePreview()`, which rebuilds a read-only iframe from `generateInvoiceHTML(invoiceData, lang)` — **the same function** used to generate the exported PDF, so the preview is guaranteed to match what gets printed.
 
-**PDF export**: `exportInvoiceToPDF()` calls `window.invoiceAPI.exportPDF(html, suggestedFileName)`, exposed by `preload.js` via `contextBridge`. Because `main.js` sets `contextIsolation: true` (and `nodeIntegration: false`) on the `BrowserWindow`, the renderer has no direct filesystem or `printToPDF` access — `preload.js` is the only sanctioned bridge, forwarding to `ipcMain.handle('export-invoice-pdf', ...)` in `main.js`, which opens a native save dialog, renders the HTML in a hidden offscreen `BrowserWindow`, and calls `webContents.printToPDF()`. Do not "simplify" this by relaxing `contextIsolation` or adding `nodeIntegration` to make PDF export easier — extend the preload bridge instead.
+**PDF export**: `exportInvoiceToPDF()` (in `core/invoicing.js`) calls `window.platformAdapter.exportPDF(html, suggestedFileName)` — never `window.invoiceAPI` directly, per the core/platform split in section 4A. In `platform-electron/shell.html`, `window.platformAdapter.exportPDF` wraps `window.invoiceAPI.exportPDF`, which `platform-electron/preload.js` exposes via `contextBridge`. Because `platform-electron/main.js` sets `contextIsolation: true` (and `nodeIntegration: false`) on the `BrowserWindow`, the renderer has no direct filesystem or `printToPDF` access — `preload.js` is the only sanctioned bridge, forwarding to `ipcMain.handle('export-invoice-pdf', ...)` in `main.js`, which opens a native save dialog, renders the HTML in a hidden offscreen `BrowserWindow`, and calls `webContents.printToPDF()`. Do not "simplify" this by relaxing `contextIsolation`/adding `nodeIntegration`, or by having `core/invoicing.js` call `window.invoiceAPI` directly — extend `window.platformAdapter` and the preload bridge instead.
 
 **History & numbering**: successful exports call `saveInvoiceRecord()`, which upserts into `invoices[]` (tagged with `projectId`) and advances `nextInvoiceNumber`. `renderInvoiceHistory()` and `reopenInvoice()` are scoped to the active project the same way the shift/expense tables are.
 
@@ -116,14 +146,14 @@ The app supports multiple projects/customers (e.g. "Almurooj School" plus others
 - **Switching**: the header's "Switch Project" control (`requestSwitchProject()`) is disabled — with an explanatory message — whenever `currentShift` is non-null, since an in-progress shift belongs to exactly one project.
 - **Rate editing**: the existing Shift Settings hourly-rate field now edits the **active project's** rate (`saveRate()`), not a global value; a caption under it names which project it applies to.
 
-### I. Electron Main Process & Preload Bridge (main.js / preload.js)
+### I. Electron Main Process & Preload Bridge (platform-electron/main.js / platform-electron/preload.js)
 
-`main.js` manages window lifecycle, system tray integration, and background minimization (`win.hide()` on window close). It also owns the `ipcMain.handle('export-invoice-pdf', ...)` handler described in section E. `preload.js` is the only file exposed to the renderer via `webPreferences.preload`; it exposes exactly one method (`window.invoiceAPI.exportPDF`) through `contextBridge.exposeInMainWorld`, deliberately minimal — no generic IPC passthrough, no Node API surface.
+`platform-electron/main.js` manages window lifecycle, system tray integration, and background minimization (`win.hide()` on window close), and loads `platform-electron/shell.html` (not `index.html`) into the `BrowserWindow`. It also owns the `ipcMain.handle('export-invoice-pdf', ...)` handler described in section E. `platform-electron/preload.js` is the only file exposed to the renderer via `webPreferences.preload`; it exposes exactly one method (`window.invoiceAPI.exportPDF`) through `contextBridge.exposeInMainWorld`, deliberately minimal — no generic IPC passthrough, no Node API surface. `shell.html` then wraps that in `window.platformAdapter` for `core/` to call — see section 4A.
 
 ## 5. Rules for Claude Code
 
-1. **`index.html` is not in the knowledge graph — read it directly.** graphify's structural extractor parses `.js`/`.ts`/etc. files, but does **not** parse inline `<script>` blocks inside `.html` files. Since ~100% of this app's real logic lives in `index.html`'s inline script, the graph never indexes it, no matter how recently `graphify extract` was run. Querying the graph for anything about clock-in logic, invoicing, projects, persistence, etc. will waste a round-trip — go straight to reading/grepping `index.html`. The graph can still be useful for `main.js`/`preload.js`, which the AST extractor does cover.
-2. **Consult the graph for `main.js`/`preload.js` changes only**: before refactoring the Electron main-process files, `graphify affected "main.js"` or checking `graphify-out/graph.json` is still worth doing — that part of the graph is accurate.
-3. **Preserve the single-file web structure**: keep `index.html`'s JavaScript and CSS inline. Don't split frontend logic into new files; `preload.js` is main-process plumbing, not an exception to this rule.
-4. **Don't break the versioned persistence pattern**: any new field added to `wt_state` needs a `SCHEMA_VERSION` bump and a migration block in `loadStoredData()` following the existing v1→v2→v3 pattern (section C) — never rename or repurpose an existing field in place.
-5. **Keep the graph updated for what it can see**: if you rename, add, or refactor functions in `main.js` or `preload.js`, run `graphify extract . --code-only` to keep that part of the graph in sync. There's no equivalent benefit for `index.html` changes.
+1. **The graph now covers the real logic — use it.** Unlike the old single-file `index.html` (whose inline `<script>` graphify could never parse), `core/*.js` and `platform-electron/*.js` are real `.js` files that graphify's AST extractor **does** index. Query the graph first (`graphify query "<question>"` or `graphify-out/graph.json`) for questions about clock-in logic, invoicing, projects, persistence, etc. The deprecated `index.html` and `shell.html`'s markup are still not indexed, but that no longer matters — `shell.html` has no logic of its own (just `<script src>` tags and the `window.platformAdapter` shim), and `index.html` is unused.
+2. **Never resurrect `index.html`.** It's deprecated, kept only as a rollback reference. If asked to add or fix a feature, make the change in the appropriate `core/*.js` file (see section 4A for which file owns what), not in `index.html`.
+3. **Preserve the core/platform split**: `core/*.js` files must never reference `window.invoiceAPI` or any other Electron-specific API directly — go through `window.platformAdapter`. This is what lets a future `platform-web/` shell reuse `core/` unchanged. If a new platform capability is needed, add a method to `window.platformAdapter` in `platform-electron/shell.html` (and eventually every other shell) rather than reaching into a platform API from `core/`.
+4. **Don't break the versioned persistence pattern**: any new field added to `wt_state` needs a `SCHEMA_VERSION` bump and a migration block in `loadStoredData()` (`core/storage.js`) following the existing v1→v2→v3 pattern (section C) — never rename or repurpose an existing field in place.
+5. **Keep the graph updated**: after renaming, adding, or refactoring functions in `core/*.js` or `platform-electron/*.js`, run `graphify extract . --code-only` — this is now genuinely useful for the whole app, not just the Electron main process.
