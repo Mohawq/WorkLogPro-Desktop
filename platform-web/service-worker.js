@@ -9,11 +9,12 @@
 // files will still load, but nothing here queues writes or syncs data;
 // that's future Supabase-backed work, out of scope for this pass.
 
-// Bumped to v2 because SHELL_ASSETS changed (shell.html -> index.html) — the
-// activate handler below only evicts caches that DON'T match CACHE_NAME, so
-// a same-named cache would just gain index.html without ever dropping the
-// stale shell.html entry for anyone who'd already installed the old worker.
-const CACHE_NAME = "worklogpro-shell-v2";
+// Bumped to v3 because SHELL_ASSETS changed again (added mobile-nav.js for
+// the tab bar / settings sheet) — same reasoning as the v1->v2 bump above:
+// the activate handler only evicts caches that DON'T match CACHE_NAME, so a
+// same-named cache would never pick up the new file for anyone who'd
+// already installed the previous worker.
+const CACHE_NAME = "worklogpro-shell-v3";
 
 // Paths are relative to this file's own location (platform-web/), matching
 // how index.html references core/*.js.
@@ -21,6 +22,7 @@ const SHELL_ASSETS = [
   "index.html",
   "manifest.json",
   "pdf-export.js",
+  "mobile-nav.js",
   "./core/state.js",
   "./core/storage.js",
   "./core/i18n.js",

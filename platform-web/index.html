@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <title>WorkLog Pro - Time & Expense Tracker</title>
 
     <!-- PWA: manifest + icons. Reuses the existing root icon.png (already
@@ -51,88 +54,258 @@
       .pulse-subtle {
         animation: pulse-ring 2s infinite ease-in-out;
       }
+
+      /* iOS notch/home-indicator clearance. env() falls back to 0px on
+         browsers that don't support it, so the plain px amount still
+         applies as the effective minimum padding. */
+      .safe-top {
+        padding-top: calc(10px + env(safe-area-inset-top, 0px));
+      }
+      .safe-bottom {
+        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      }
+
+      /* Bottom tab bar active state — reuses indigo-600 (#4f46e5), the same
+         accent already used on the Create Invoice / primary action buttons
+         elsewhere in this file, rather than introducing a new color. */
+      .tab-btn {
+        color: #94a3b8;
+      }
+      .tab-btn.active {
+        color: #4f46e5;
+      }
+      .tab-btn.active span {
+        font-weight: 700;
+      }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-800 min-h-screen pb-12">
-    <!-- Top Navigation Header -->
-    <header class="bg-slate-900 text-white shadow-md border-b border-slate-800">
-      <div
-        class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4"
-      >
-        <div class="flex items-center gap-3">
+  <body
+    class="bg-slate-50 text-slate-800 min-h-screen"
+    style="padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px))"
+  >
+    <!-- Top Navigation Header: compact, ~60-70px incl. safe-area-inset-top,
+         so the title never sits under an iPhone notch/status bar. Only
+         icon + title + project subtitle + settings button live here now —
+         everything else that used to be in the header (switch project,
+         backup/restore, live clock) moved into #settingsSheet below. -->
+    <header
+      class="bg-slate-900 text-white shadow-md border-b border-slate-800 sticky top-0 z-40 safe-top"
+    >
+      <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
           <div
-            class="bg-indigo-600/30 p-2.5 rounded-xl backdrop-blur-sm border border-indigo-500/30"
+            class="bg-indigo-600/30 w-9 h-9 shrink-0 rounded-lg flex items-center justify-center border border-indigo-500/30"
           >
-            <i class="fa-solid fa-clock text-2xl text-indigo-400"></i>
+            <i class="fa-solid fa-clock text-sm text-indigo-400"></i>
           </div>
-          <div>
-            <h1 class="text-xl font-bold tracking-tight text-white">
+          <div class="min-w-0">
+            <h1 class="text-[15px] font-medium tracking-tight text-white leading-tight truncate">
               WorkLog Pro
             </h1>
-            <p class="text-xs text-slate-400">
-              Time Card & Expense Management System
+            <p
+              id="activeProjectName"
+              class="text-xs text-slate-400 leading-tight truncate"
+            >
+              —
             </p>
           </div>
         </div>
 
-        <div class="flex items-center gap-3">
-          <!-- Active Project Badge -->
-          <div
-            class="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700"
+        <button
+          type="button"
+          onclick="openSettingsSheet()"
+          title="Settings"
+          class="w-9 h-9 shrink-0 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300"
+        >
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Settings Sheet: Hourly Rate, Shift Notes, Invoice Signature, Switch
+         Project, Backup/Restore, and the live clock — all moved out of the
+         main Timer tab per the mobile redesign. Simple show/hide overlay,
+         no animation library. -->
+    <div id="settingsSheet" class="fixed inset-0 z-50 hidden">
+      <div
+        class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        onclick="closeSettingsSheet()"
+      ></div>
+      <div
+        class="absolute bottom-0 inset-x-0 bg-white rounded-t-2xl shadow-2xl max-h-[85vh] overflow-y-auto safe-bottom"
+      >
+        <div
+          class="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-slate-100"
+        >
+          <h3 class="text-base font-bold text-slate-800">Settings</h3>
+          <button
+            type="button"
+            onclick="closeSettingsSheet()"
+            class="text-slate-400 hover:text-slate-600 text-lg"
           >
-            <i class="fa-solid fa-folder-open text-indigo-400 text-xs"></i>
-            <span id="activeProjectName" class="text-xs font-semibold text-white"
-              >—</span
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div class="p-5 space-y-6">
+          <!-- Project -->
+          <div>
+            <h4
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"
             >
-            <button
-              id="switchProjectBtn"
-              onclick="requestSwitchProject()"
-              class="ml-1 text-[11px] text-indigo-300 hover:text-indigo-100 font-semibold underline decoration-dotted disabled:text-slate-500 disabled:no-underline disabled:cursor-not-allowed"
+              Project
+            </h4>
+            <div
+              class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200"
             >
-              Switch
-            </button>
+              <span class="text-xs text-slate-600 flex items-center gap-2">
+                <i class="fa-solid fa-folder-open text-indigo-500 text-xs"></i>
+                Active project shown in header
+              </span>
+              <button
+                id="switchProjectBtn"
+                onclick="requestSwitchProject()"
+                class="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline decoration-dotted disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed shrink-0"
+              >
+                Switch
+              </button>
+            </div>
           </div>
 
-          <!-- Backup & Restore Buttons in Header -->
-          <button
-            onclick="exportData()"
-            title="Backup data to file"
-            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition flex items-center gap-2"
-          >
-            <i class="fa-solid fa-download text-indigo-400"></i> Backup Data
-          </button>
-          <label
-            title="Restore data from backup file"
-            class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center gap-2"
-          >
-            <i class="fa-solid fa-upload text-emerald-400"></i> Restore Data
-            <input
-              type="file"
-              id="importFileInput"
-              accept=".json"
-              onchange="importData(event)"
-              class="hidden"
-            />
-          </label>
-
-          <div
-            class="flex items-center gap-4 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 ml-2"
-          >
-            <div class="text-right">
-              <div
-                id="liveClock"
-                class="text-lg font-bold font-mono tracking-wider text-indigo-300"
-              >
-                00:00:00 AM
+          <!-- Shift Settings (moved from the Timer tab) -->
+          <div>
+            <h4
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"
+            >
+              Shift Settings
+            </h4>
+            <div class="space-y-4">
+              <div>
+                <label
+                  for="hourlyRate"
+                  class="block text-xs font-medium text-slate-700 mb-1"
+                  >Hourly Pay Rate ($)</label
+                >
+                <div class="relative rounded-md shadow-sm">
+                  <div
+                    class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"
+                  >
+                    $
+                  </div>
+                  <input
+                    type="number"
+                    id="hourlyRate"
+                    value="20.00"
+                    step="0.50"
+                    min="0"
+                    onchange="saveRate()"
+                    class="block w-full rounded-xl border-slate-300 pl-8 pr-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <p id="rateProjectHint" class="text-[11px] text-slate-400 mt-1">
+                  Select a project to set its rate
+                </p>
               </div>
-              <div id="liveDate" class="text-xs text-slate-400">
-                Monday, Jan 1
+              <div>
+                <label
+                  for="notesInput"
+                  class="block text-xs font-medium text-slate-700 mb-1"
+                  >Active Shift Notes</label
+                >
+                <input
+                  type="text"
+                  id="notesInput"
+                  placeholder="Task details, job code..."
+                  class="block w-full rounded-xl border-slate-300 px-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div class="border-t border-slate-100 pt-4">
+                <label class="block text-xs font-medium text-slate-700 mb-1"
+                  >Invoice Signature</label
+                >
+                <div class="flex items-center gap-3">
+                  <img
+                    id="signaturePreview"
+                    src=""
+                    alt="Signature preview"
+                    class="hidden h-10 max-w-[100px] object-contain border border-slate-200 rounded-lg bg-white p-1"
+                  />
+                  <span id="signatureEmptyLabel" class="text-xs text-slate-400"
+                    >No signature uploaded</span
+                  >
+                  <label
+                    class="cursor-pointer text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                  >
+                    Upload
+                    <input
+                      type="file"
+                      id="signatureFileInput"
+                      accept="image/png, image/jpeg"
+                      onchange="handleSignatureUpload(event)"
+                      class="hidden"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    id="signatureRemoveBtn"
+                    onclick="removeSignature()"
+                    class="hidden text-xs text-rose-600 hover:text-rose-800 font-semibold"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">
+                  Appears automatically on every generated invoice.
+                </p>
               </div>
             </div>
           </div>
+
+          <!-- Data -->
+          <div>
+            <h4
+              class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"
+            >
+              Data
+            </h4>
+            <div class="grid grid-cols-2 gap-3">
+              <button
+                onclick="exportData()"
+                title="Backup data to file"
+                class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2"
+              >
+                <i class="fa-solid fa-download text-indigo-500"></i> Backup
+              </button>
+              <label
+                title="Restore data from backup file"
+                class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <i class="fa-solid fa-upload text-emerald-600"></i> Restore
+                <input
+                  type="file"
+                  id="importFileInput"
+                  accept=".json"
+                  onchange="importData(event)"
+                  class="hidden"
+                />
+              </label>
+            </div>
+          </div>
+
+          <!-- Live clock: not part of the new mobile design, but the
+               element must keep existing — core/shift-tracking.js's
+               updateClock() writes to it every second via
+               getElementById(...).textContent and would throw on a null
+               element. Kept as an unobtrusive footer line instead of being
+               removed. -->
+          <div class="text-center text-[11px] text-slate-300 pt-1">
+            <span id="liveClock">00:00:00 AM</span> ·
+            <span id="liveDate">Monday, Jan 1</span>
+          </div>
         </div>
       </div>
-    </header>
+    </div>
 
     <!-- Project Picker Screen -->
     <div
@@ -209,14 +382,19 @@
     </div>
 
     <!-- Main Container -->
-    <main
-      class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8"
-    >
-      <!-- Left Column: Shift Controller & Settings -->
-      <section class="space-y-6">
+    <!-- Main Container: three tab views. core/ui.js's render functions only
+         depend on their target element IDs existing somewhere in the
+         document — they don't care about surrounding structure — so this
+         grouping is done directly in markup with zero changes to core/ui.js
+         and no reparenting script. Only #tab-timer starts visible; the
+         other two start with the "hidden" class and mobile-nav.js's
+         showTab() toggles it on tab-bar taps. -->
+    <main class="max-w-7xl mx-auto px-4 pt-4">
+      <!-- Timer Tab -->
+      <div id="tab-timer" class="space-y-5">
         <!-- Clock Control Card -->
         <div
-          class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-5"
+          class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-5"
         >
           <div
             class="flex justify-between items-center border-b border-slate-100 pb-4"
@@ -246,7 +424,7 @@
             </div>
             <div
               id="activeDuration"
-              class="text-3xl font-extrabold font-mono text-slate-800 mt-1"
+              class="text-4xl font-extrabold font-mono text-slate-800 mt-1"
             >
               00:00:00
             </div>
@@ -280,7 +458,7 @@
                 id="startBreakBtn"
                 onclick="startBreak()"
                 disabled
-                class="py-3 px-3 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm"
+                class="py-3 px-3 bg-white hover:bg-amber-50 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-amber-700 border border-amber-300 disabled:border-slate-200 font-semibold rounded-xl transition flex items-center justify-center gap-2 text-sm"
               >
                 <i class="fa-solid fa-coffee"></i> Start Break
               </button>
@@ -288,7 +466,7 @@
                 id="endBreakBtn"
                 onclick="endBreak()"
                 disabled
-                class="py-3 px-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-sm"
+                class="py-3 px-3 bg-white hover:bg-blue-50 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-blue-700 border border-blue-300 disabled:border-slate-200 font-semibold rounded-xl transition flex items-center justify-center gap-2 text-sm"
               >
                 <i class="fa-solid fa-mug-hot"></i> End Break
               </button>
@@ -305,186 +483,72 @@
           </div>
         </div>
 
-        <!-- Settings / Rates -->
-        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <h2
-            class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4"
-          >
-            Shift Settings
-          </h2>
-          <div class="space-y-4">
-            <div>
-              <label
-                for="hourlyRate"
-                class="block text-xs font-medium text-slate-700 mb-1"
-                >Hourly Pay Rate ($)</label
-              >
-              <div class="relative rounded-md shadow-sm">
-                <div
-                  class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"
-                >
-                  $
-                </div>
-                <input
-                  type="number"
-                  id="hourlyRate"
-                  value="20.00"
-                  step="0.50"
-                  min="0"
-                  onchange="saveRate()"
-                  class="block w-full rounded-xl border-slate-300 pl-8 pr-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <p id="rateProjectHint" class="text-[11px] text-slate-400 mt-1">
-                Select a project to set its rate
-              </p>
-            </div>
-            <div>
-              <label
-                for="notesInput"
-                class="block text-xs font-medium text-slate-700 mb-1"
-                >Active Shift Notes</label
-              >
-              <input
-                type="text"
-                id="notesInput"
-                placeholder="Task details, job code..."
-                class="block w-full rounded-xl border-slate-300 px-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            <div class="border-t border-slate-100 pt-4">
-              <label class="block text-xs font-medium text-slate-700 mb-1"
-                >Invoice Signature</label
-              >
-              <div class="flex items-center gap-3">
-                <img
-                  id="signaturePreview"
-                  src=""
-                  alt="Signature preview"
-                  class="hidden h-10 max-w-[100px] object-contain border border-slate-200 rounded-lg bg-white p-1"
-                />
-                <span id="signatureEmptyLabel" class="text-xs text-slate-400"
-                  >No signature uploaded</span
-                >
-                <label
-                  class="cursor-pointer text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
-                >
-                  Upload
-                  <input
-                    type="file"
-                    id="signatureFileInput"
-                    accept="image/png, image/jpeg"
-                    onchange="handleSignatureUpload(event)"
-                    class="hidden"
-                  />
-                </label>
-                <button
-                  type="button"
-                  id="signatureRemoveBtn"
-                  onclick="removeSignature()"
-                  class="hidden text-xs text-rose-600 hover:text-rose-800 font-semibold"
-                >
-                  Remove
-                </button>
-              </div>
-              <p class="text-[11px] text-slate-400 mt-1">
-                Appears automatically on every generated invoice.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Action Buttons Grid -->
-        <div class="grid grid-cols-2 gap-3">
-          <button
-            onclick="toggleManualEntryModal()"
-            class="w-full py-2.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-xl transition text-xs sm:text-sm flex items-center justify-center gap-2"
-          >
-            <i class="fa-solid fa-pen-to-square"></i> Add Past Entry
-          </button>
-          <button
-            onclick="toggleExpenseModal()"
-            class="w-full py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium rounded-xl border border-indigo-200 transition text-xs sm:text-sm flex items-center justify-center gap-2"
-          >
-            <i class="fa-solid fa-file-invoice-dollar"></i> Add Expense/Bill
-          </button>
-        </div>
-      </section>
-
-      <!-- Right Column: Shift History & Summaries -->
-      <section class="lg:col-span-2 space-y-6">
         <!-- Today's Stats Cards -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          <div
-            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm"
-          >
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-slate-100 p-4 rounded-2xl">
             <div class="text-xs font-medium text-slate-400 uppercase">
               Worked Hours
             </div>
             <div
               id="statWorkedHours"
-              class="text-xl sm:text-2xl font-bold text-slate-800 mt-1"
+              class="text-lg font-bold text-slate-800 mt-1"
             >
               0.00 hrs
             </div>
           </div>
-          <div
-            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm"
-          >
+          <div class="bg-slate-100 p-4 rounded-2xl">
             <div class="text-xs font-medium text-slate-400 uppercase">
               Work Earnings
             </div>
             <div
               id="statEarnings"
-              class="text-xl sm:text-2xl font-bold text-emerald-600 mt-1"
+              class="text-lg font-bold text-emerald-600 mt-1"
             >
               $0.00
             </div>
           </div>
-          <div
-            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm"
-          >
+          <div class="bg-slate-100 p-4 rounded-2xl">
             <div class="text-xs font-medium text-slate-400 uppercase">
               Expenses / Bills
             </div>
             <div
               id="statExpenses"
-              class="text-xl sm:text-2xl font-bold text-purple-600 mt-1"
+              class="text-lg font-bold text-purple-600 mt-1"
             >
               $0.00
             </div>
           </div>
-          <div
-            class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm bg-indigo-50/50 border-indigo-100"
-          >
+          <div class="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
             <div class="text-xs font-semibold text-indigo-500 uppercase">
               Total Payout Due
             </div>
             <div
               id="statTotalPayout"
-              class="text-xl sm:text-2xl font-extrabold text-indigo-700 mt-1"
+              class="text-lg font-extrabold text-indigo-700 mt-1"
             >
               $0.00
             </div>
           </div>
         </div>
 
+        <button
+          onclick="toggleManualEntryModal()"
+          class="w-full py-2.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-xl transition text-sm flex items-center justify-center gap-2"
+        >
+          <i class="fa-solid fa-pen-to-square"></i> Add Past Entry
+        </button>
+
         <!-- Shift History Logs Table -->
         <div
           class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
         >
-          <div
-            class="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
-          >
-            <div>
-              <h2 class="text-lg font-bold text-slate-800">
-                Time Card History
-              </h2>
-              <p class="text-xs text-slate-400">
-                Logged work shifts and break records
-              </p>
-            </div>
+          <div class="p-4 border-b border-slate-100">
+            <h2 class="text-base font-bold text-slate-800">
+              Time Card History
+            </h2>
+            <p class="text-xs text-slate-400">
+              Logged work shifts and break records
+            </p>
           </div>
 
           <div class="overflow-x-auto">
@@ -518,16 +582,26 @@
             </p>
           </div>
         </div>
+      </div>
+
+      <!-- Expenses Tab -->
+      <div id="tab-expenses" class="space-y-5 hidden">
+        <button
+          onclick="toggleExpenseModal()"
+          class="w-full py-2.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium rounded-xl border border-indigo-200 transition text-sm flex items-center justify-center gap-2"
+        >
+          <i class="fa-solid fa-file-invoice-dollar"></i> Add Expense/Bill
+        </button>
 
         <!-- Expenses & Invoices History Table -->
         <div
           class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
         >
           <div
-            class="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+            class="p-4 border-b border-slate-100 flex justify-between items-center gap-4"
           >
             <div>
-              <h2 class="text-lg font-bold text-slate-800">
+              <h2 class="text-base font-bold text-slate-800">
                 Reimbursable Expenses & Invoices
               </h2>
               <p class="text-xs text-slate-400">
@@ -536,7 +610,7 @@
             </div>
             <button
               onclick="openCreateInvoiceModal()"
-              class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2"
+              class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shrink-0"
             >
               <i class="fa-solid fa-file-invoice"></i> Create Invoice
             </button>
@@ -569,22 +643,21 @@
             </p>
           </div>
         </div>
+      </div>
 
+      <!-- Invoices Tab -->
+      <div id="tab-invoices" class="space-y-5 hidden">
         <!-- Invoice History Table -->
         <div
           class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
         >
-          <div
-            class="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
-          >
-            <div>
-              <h2 class="text-lg font-bold text-slate-800">
-                Invoice History
-              </h2>
-              <p class="text-xs text-slate-400">
-                Previously generated client invoices
-              </p>
-            </div>
+          <div class="p-4 border-b border-slate-100">
+            <h2 class="text-base font-bold text-slate-800">
+              Invoice History
+            </h2>
+            <p class="text-xs text-slate-400">
+              Previously generated client invoices
+            </p>
           </div>
 
           <div class="overflow-x-auto">
@@ -612,8 +685,45 @@
             <p class="text-sm font-medium">No invoices created yet.</p>
           </div>
         </div>
-      </section>
+      </div>
     </main>
+
+    <!-- Bottom Tab Bar: fixed, clears the home indicator via safe-bottom.
+         Simple show/hide (mobile-nav.js's showTab()) — no routing. -->
+    <nav
+      id="bottomTabBar"
+      class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30 safe-bottom"
+    >
+      <div class="max-w-7xl mx-auto grid grid-cols-3">
+        <button
+          type="button"
+          data-tab="timer"
+          onclick="showTab('timer')"
+          class="tab-btn active flex flex-col items-center justify-center gap-1 py-2.5"
+        >
+          <i class="fa-solid fa-clock text-lg"></i>
+          <span class="text-[11px]">Timer</span>
+        </button>
+        <button
+          type="button"
+          data-tab="expenses"
+          onclick="showTab('expenses')"
+          class="tab-btn flex flex-col items-center justify-center gap-1 py-2.5"
+        >
+          <i class="fa-solid fa-receipt text-lg"></i>
+          <span class="text-[11px]">Expenses</span>
+        </button>
+        <button
+          type="button"
+          data-tab="invoices"
+          onclick="showTab('invoices')"
+          class="tab-btn flex flex-col items-center justify-center gap-1 py-2.5"
+        >
+          <i class="fa-solid fa-file-invoice text-lg"></i>
+          <span class="text-[11px]">Invoices</span>
+        </button>
+      </div>
+    </nav>
 
     <!-- Manual Entry / Edit Modal -->
     <div
@@ -1324,6 +1434,10 @@
          other browser API directly; they call window.platformAdapter
          instead, same contract as the Electron shell. -->
     <script src="pdf-export.js"></script>
+
+    <!-- Mobile tab bar + settings sheet — platform-web-only UI wiring, does
+         not touch core/*.js state or storage. -->
+    <script src="mobile-nav.js"></script>
     <script>
       window.platformAdapter = {
         exportPDF: (html, suggestedFileName) =>
