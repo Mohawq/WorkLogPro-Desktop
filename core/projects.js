@@ -191,6 +191,17 @@
         }
       }
 
+      // Remembers the description used for this project's last Product
+      // Invoice (see core/invoicing.js's isProductInvoice mode), so the next
+      // one can pre-fill it. Caller is responsible for persisting —
+      // invoicing.js's saveInvoiceRecord() already calls persistState()
+      // right after this, so this doesn't call it a second time itself.
+      function setProjectLastProductInvoiceDescription(projectId, description) {
+        const project = projects.find((p) => p.id === projectId);
+        if (!project || !description) return;
+        project.lastProductInvoiceDescription = description;
+      }
+
       // saveRate/saveShift/saveLogs/saveExpenses are kept as named entry points (the
       // hourlyRate input's onchange calls saveRate() directly) but now just persist the
       // whole envelope, so callers no longer need to know which key backs which field.

@@ -97,9 +97,176 @@
         document.getElementById("invShiftChecklist").innerHTML = "";
         document.getElementById("invExpenseChecklist").innerHTML = "";
 
+        ensureProductInvoiceCreateUI();
+        document.getElementById("invIsProductInvoice").checked = false;
+        document.getElementById("productInvoiceOptions").classList.add("hidden");
+        document.getElementById("invProductDescription").value = "";
+        document.getElementById("invProductAmount").value = "";
+        setProductAmountMode("calculated");
+
         const modal = document.getElementById("createInvoiceModal");
         modal.classList.remove("hidden");
         modal.classList.add("flex");
+      }
+
+      // Product Invoice mode — a per-invoice toggle that hides shift-derived
+      // line items from the client-facing preview/PDF, replacing them with
+      // one editable manual line item. Injects its own markup into the
+      // Create Invoice modal on first use rather than living in shell.html:
+      // core/ must work identically across every platform shell (Electron,
+      // web) without any of them needing a matching markup change.
+      function ensureProductInvoiceCreateUI() {
+        if (document.getElementById("productInvoiceSection")) return;
+
+        const anchor = document.getElementById("invRecordsPicker");
+        if (!anchor) return;
+
+        anchor.insertAdjacentHTML(
+          "beforebegin",
+          `<div id="productInvoiceSection" class="border-t border-slate-100 pt-4 space-y-3">
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="invIsProductInvoice" onchange="handleProductInvoiceToggle(this.checked)" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              <label for="invIsProductInvoice" class="text-xs font-medium text-slate-700">Product Invoice (hide shift details from client)</label>
+            </div>
+            <div id="productInvoiceOptions" class="hidden space-y-3 pl-6">
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Amount</label>
+                <div class="flex gap-2">
+                  <button type="button" id="pmCalculatedBtn" onclick="setProductAmountMode('calculated')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition bg-indigo-600 text-white">Calculated from tracked hours</button>
+                  <button type="button" id="pmManualBtn" onclick="setProductAmountMode('manual')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition bg-slate-100 text-slate-600">Manual amount</button>
+                </div>
+                <input type="hidden" id="invProductAmountMode" value="calculated" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Line Item Description</label>
+                <input type="text" id="invProductDescription" placeholder="Services Rendered" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">Amount ($)</label>
+                <input type="number" step="0.01" min="0" id="invProductAmount" readonly class="w-full px-3 py-2 border border-slate-300 bg-slate-50 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                <p id="invProductAmountHint" class="text-[11px] text-slate-400 mt-1">Automatically calculated from the checked shifts and expenses above.</p>
+              </div>
+            </div>
+          </div>`,
+        );
+      }
+
+      function handleProductInvoiceToggle(checked) {
+        document
+          .getElementById("productInvoiceOptions")
+          .classList.toggle("hidden", !checked);
+
+        if (checked) {
+          // Only pre-fill if the user hasn't already typed something —
+          // avoids clobbering their own edit on an uncheck/recheck cycle.
+          const descInput = document.getElementById("invProductDescription");
+          if (!descInput.value.trim()) {
+            const project = getActiveProject();
+            descInput.value =
+              (project && project.lastProductInvoiceDescription) || "";
+          }
+          setProductAmountMode("calculated");
+        }
+      }
+
+      // Shared by setProductAmountMode() (Create modal) and
+      // renderProductInvoicePreviewControls() (Preview modal) — the two
+      // button pairs live in different DOM regions with different ids, but
+      // the active/inactive styling logic itself is identical.
+      function applyProductModeButtonStyles(calcBtn, manualBtn, calculated) {
+        calcBtn.classList.toggle("bg-indigo-600", calculated);
+        calcBtn.classList.toggle("text-white", calculated);
+        calcBtn.classList.toggle("bg-slate-100", !calculated);
+        calcBtn.classList.toggle("text-slate-600", !calculated);
+        manualBtn.classList.toggle("bg-indigo-600", !calculated);
+        manualBtn.classList.toggle("text-white", !calculated);
+        manualBtn.classList.toggle("bg-slate-100", calculated);
+        manualBtn.classList.toggle("text-slate-600", calculated);
+      }
+
+      // Builds the Product Invoice auto-generated line item. Shared by
+      // handleCreateInvoiceSubmit() (Create modal) and
+      // updateInvoiceProductToggle() (Preview modal, toggling on mid-edit)
+      // so the two entry points can never drift apart. rawDescription may be
+      // empty (the Preview modal has no separate description input to read
+      // at toggle time — the item's description is edited afterward through
+      // the normal expense-row editing) — the fallback chain still resolves
+      // the same way either way.
+      function buildProductInvoiceLineItem(rawDescription, amount) {
+        const project = getActiveProject();
+        const description =
+          (rawDescription || "").trim() ||
+          (project && project.lastProductInvoiceDescription) ||
+          "Services Rendered";
+        return {
+          id: generateId(),
+          sourceExpenseId: null,
+          description,
+          amount: Number(amount) || 0,
+          isAutoGenerated: true,
+        };
+      }
+
+      function setProductAmountMode(mode) {
+        document.getElementById("invProductAmountMode").value = mode;
+
+        const calcBtn = document.getElementById("pmCalculatedBtn");
+        const manualBtn = document.getElementById("pmManualBtn");
+        const calculated = mode === "calculated";
+        applyProductModeButtonStyles(calcBtn, manualBtn, calculated);
+
+        const amountInput = document.getElementById("invProductAmount");
+        const hint = document.getElementById("invProductAmountHint");
+        if (calculated) {
+          amountInput.readOnly = true;
+          amountInput.classList.add("bg-slate-50");
+          hint.textContent =
+            "Automatically calculated from the checked shifts and expenses above.";
+          // Re-syncs to the live total, discarding whatever manual edit was
+          // there — switching back to calculated is meant to trust the
+          // formula again, not preserve a manual override.
+          recomputeProductInvoiceAmount();
+        } else {
+          // Deliberately do NOT reset the value here — whatever the
+          // calculated amount currently was is a better starting point for
+          // manual editing than 0.
+          amountInput.readOnly = false;
+          amountInput.classList.remove("bg-slate-50");
+          hint.textContent = "Enter the amount to bill for this invoice.";
+        }
+      }
+
+      // Live-sums the currently checked shift/expense checklist items — the
+      // same data handleCreateInvoiceSubmit() reads at submit time — so
+      // "Calculated" mode's displayed amount tracks the checklist selection
+      // in real time rather than a one-time snapshot. No-op in manual mode.
+      function recomputeProductInvoiceAmount() {
+        const modeInput = document.getElementById("invProductAmountMode");
+        if (!modeInput || modeInput.value !== "calculated") return;
+
+        const checkedShiftIds = Array.from(
+          document.querySelectorAll(".inv-shift-check:checked"),
+        ).map((el) => Number(el.value));
+        const checkedExpenseIds = Array.from(
+          document.querySelectorAll(".inv-expense-check:checked"),
+        ).map((el) => Number(el.value));
+
+        const laborTotal = logs
+          .filter((log) => checkedShiftIds.includes(log.id))
+          .reduce((sum, log) => {
+            const hours = (Number(log.netDurationMs) || 0) / (1000 * 60 * 60);
+            const rate = Number(log.hourlyRate) || getActiveRate();
+            return sum + hours * rate;
+          }, 0);
+
+        const expenseTotal = expenses
+          .filter((exp) => checkedExpenseIds.includes(exp.id))
+          .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+
+        const amountInput = document.getElementById("invProductAmount");
+        if (amountInput) {
+          amountInput.value = (laborTotal + expenseTotal).toFixed(2);
+        }
       }
 
       function closeCreateInvoiceModal() {
@@ -148,7 +315,7 @@
                   ).toFixed(2);
                   return `
                     <label class="flex items-center gap-2 py-1.5 text-xs text-slate-600">
-                      <input type="checkbox" class="inv-shift-check" value="${log.id}" checked />
+                      <input type="checkbox" class="inv-shift-check" value="${log.id}" checked onchange="recomputeProductInvoiceAmount()" />
                       <span class="flex-1">${escapeHtml(log.date || "")} — ${hrs} hrs — ${escapeHtml(log.notes || "Normal Shift")}</span>
                     </label>`;
                 })
@@ -162,13 +329,17 @@
                 .map(
                   (exp) => `
                     <label class="flex items-center gap-2 py-1.5 text-xs text-slate-600">
-                      <input type="checkbox" class="inv-expense-check" value="${exp.id}" checked />
+                      <input type="checkbox" class="inv-expense-check" value="${exp.id}" checked onchange="recomputeProductInvoiceAmount()" />
                       <span class="flex-1">${escapeHtml(exp.date || "")} — ${escapeHtml(exp.title)} — $${(Number(exp.amount) || 0).toFixed(2)}</span>
                     </label>`,
                 )
                 .join("");
 
         document.getElementById("invRecordsPicker").classList.remove("hidden");
+        // Checkboxes start checked, so the calculated amount (if Product
+        // Invoice + Calculated mode is already on) should reflect that
+        // immediately rather than waiting for the first manual toggle.
+        recomputeProductInvoiceAmount();
       }
 
       function handleCreateInvoiceSubmit(event) {
@@ -210,6 +381,31 @@
           document.getElementById("invNumber").value.trim() ||
           String(nextInvoiceNumber);
 
+        // Product Invoice: auto-create ONE manual line item via the same
+        // mechanism addManualLineItem() uses (a plain expenseItems entry),
+        // marked isAutoGenerated so toggling this off later can distinguish
+        // it from the user's own manual lines. workItems/expenseItems above
+        // are untouched either way — the underlying shift/expense selection
+        // is always stored for the user's own records, regardless of this
+        // toggle; it's purely a rendering decision (see generateInvoiceHTML).
+        const isProductInvoice = document.getElementById(
+          "invIsProductInvoice",
+        ).checked;
+        const productAmountMode =
+          document.getElementById("invProductAmountMode").value === "manual"
+            ? "manual"
+            : "calculated";
+
+        if (isProductInvoice) {
+          const rawDescription = document.getElementById(
+            "invProductDescription",
+          ).value;
+          const amount =
+            parseFloat(document.getElementById("invProductAmount").value) ||
+            0;
+          expenseItems.push(buildProductInvoiceLineItem(rawDescription, amount));
+        }
+
         invoiceDraft = {
           savedInvoiceId: null,
           projectId: activeProjectId,
@@ -226,6 +422,8 @@
           expenseItems,
           discount: 0,
           includeSignature: !!signatureImage,
+          isProductInvoice,
+          productAmountMode,
         };
 
         closeCreateInvoiceModal();
@@ -255,6 +453,10 @@
           businessName: draft.businessName,
           clientDetails: draft.clientDetails,
           dateIssued: draft.dateIssued,
+          // Rendering-only flag — generateInvoiceHTML() skips the
+          // shift-derived work section when true. Doesn't affect which data
+          // is stored (see workItems below, always populated in full).
+          isProductInvoice: !!draft.isProductInvoice,
           workItems: draft.workItems.map((w) => ({
             date: w.date,
             description: w.description,
@@ -265,6 +467,9 @@
           expenseItems: draft.expenseItems.map((e) => ({
             description: e.description,
             amount: Number(e.amount) || 0,
+            // Carried through so a reopened invoice can still tell which
+            // line item is the auto-generated one (see reopenInvoice()).
+            isAutoGenerated: !!e.isAutoGenerated,
           })),
           laborSubtotal: totals.laborSubtotal,
           expensesSubtotal: totals.expensesSubtotal,
@@ -315,8 +520,133 @@
         modal.classList.remove("flex");
       }
 
+      // Same Product Invoice toggle + Calculated/Manual control as the
+      // Create modal, mirrored into the Preview/Edit modal so an existing
+      // invoice's mode can be changed after the fact, not just at creation.
+      // No separate description/amount inputs here (unlike the Create
+      // modal) — once invoiceDraft exists, the auto-generated item is just
+      // a normal row in the expense table below, already editable through
+      // the existing updateExpenseItem()/read-only-when-derived machinery.
+      function ensureProductInvoicePreviewUI() {
+        if (document.getElementById("pvProductInvoiceSection")) return;
+
+        const anchor = document.getElementById("pvSignatureToggleWrap");
+        if (!anchor) return;
+
+        anchor.insertAdjacentHTML(
+          "afterend",
+          `<div id="pvProductInvoiceSection" class="space-y-2">
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="pvIsProductInvoice" onchange="updateInvoiceProductToggle(this.checked)" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+              <label for="pvIsProductInvoice" class="text-xs font-medium text-slate-700">Product Invoice (hide shift details from client)</label>
+            </div>
+            <div id="pvProductAmountModeWrap" class="hidden flex gap-2 pl-6">
+              <button type="button" id="pvProductCalcBtn" onclick="updateInvoiceProductAmountMode('calculated')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition bg-indigo-600 text-white">Calculated from tracked hours</button>
+              <button type="button" id="pvProductManualBtn" onclick="updateInvoiceProductAmountMode('manual')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition bg-slate-100 text-slate-600">Manual amount</button>
+            </div>
+          </div>`,
+        );
+      }
+
+      // Keeps the preview's own checkbox/buttons in sync with invoiceDraft —
+      // called on every renderInvoiceEditor() pass (same "resync from the
+      // source of truth every render" approach as the totals/table bodies
+      // below), so reopening an existing product invoice shows the toggle
+      // already correctly set without any extra wiring at reopen time.
+      function renderProductInvoicePreviewControls() {
+        const checkbox = document.getElementById("pvIsProductInvoice");
+        const modeWrap = document.getElementById("pvProductAmountModeWrap");
+        if (!checkbox || !modeWrap) return;
+
+        checkbox.checked = !!invoiceDraft.isProductInvoice;
+        modeWrap.classList.toggle("hidden", !invoiceDraft.isProductInvoice);
+
+        const calcBtn = document.getElementById("pvProductCalcBtn");
+        const manualBtn = document.getElementById("pvProductManualBtn");
+        const calculated =
+          (invoiceDraft.productAmountMode || "calculated") === "calculated";
+        applyProductModeButtonStyles(calcBtn, manualBtn, calculated);
+      }
+
+      // Toggling ON: synthesize the auto-generated line item (via the same
+      // builder handleCreateInvoiceSubmit() uses) and add it to
+      // expenseItems. Toggling OFF: remove ONLY that item — every other
+      // manual/discount line item the user added themselves, even while
+      // this was on, is left untouched. The shift/expense checklist data
+      // underlying workItems is never discarded by this toggle either way
+      // (see buildInvoiceSnapshot's comment), so turning it back off always
+      // restores the full itemized view with nothing lost.
+      function updateInvoiceProductToggle(checked) {
+        if (!invoiceDraft) return;
+
+        invoiceDraft.isProductInvoice = checked;
+
+        if (checked) {
+          const hasAutoItem = invoiceDraft.expenseItems.some(
+            (e) => e.isAutoGenerated,
+          );
+          if (!hasAutoItem) {
+            invoiceDraft.expenseItems.push(
+              buildProductInvoiceLineItem("", 0),
+            );
+          }
+          // Matches the Create modal's own toggle-on behavior (see
+          // handleProductInvoiceToggle): always resets to "calculated" so a
+          // fresh toggle-on starts from a live total, not a stale mode left
+          // over from an earlier on/off cycle in this same session.
+          invoiceDraft.productAmountMode = "calculated";
+        } else {
+          invoiceDraft.expenseItems = invoiceDraft.expenseItems.filter(
+            (e) => !e.isAutoGenerated,
+          );
+        }
+
+        renderInvoiceEditor();
+      }
+
+      // Switching modes while already on. The actual recompute/discard
+      // behavior lives in the reactive block at the top of
+      // renderInvoiceEditor() below — it already recomputes the
+      // auto-item's amount from every other line item whenever mode is
+      // "calculated", and leaves it exactly as-is (so it keeps whatever
+      // value it last held) when "manual". That block was written mode-
+      // generically from the start, so switching modes here needs nothing
+      // more than flipping the field and re-rendering.
+      function updateInvoiceProductAmountMode(mode) {
+        if (!invoiceDraft) return;
+        invoiceDraft.productAmountMode = mode === "manual" ? "manual" : "calculated";
+        renderInvoiceEditor();
+      }
+
       function renderInvoiceEditor() {
         if (!invoiceDraft) return;
+
+        ensureProductInvoicePreviewUI();
+        renderProductInvoicePreviewControls();
+
+        // Product Invoice + "calculated" mode: keep the auto-generated line
+        // item's amount derived from every OTHER work/expense item, fresh on
+        // every render — the same "recompute, don't cache" pattern
+        // computeInvoiceTotals() already uses, applied to one line item
+        // instead of the grand total. No-op if the user removed that item.
+        if (
+          invoiceDraft.isProductInvoice &&
+          invoiceDraft.productAmountMode === "calculated"
+        ) {
+          const autoItem = invoiceDraft.expenseItems.find(
+            (e) => e.isAutoGenerated,
+          );
+          if (autoItem) {
+            const laborTotal = invoiceDraft.workItems.reduce(
+              (sum, w) => sum + (Number(w.hours) || 0) * (Number(w.rate) || 0),
+              0,
+            );
+            const otherExpenseTotal = invoiceDraft.expenseItems
+              .filter((e) => e !== autoItem)
+              .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+            autoItem.amount = laborTotal + otherExpenseTotal;
+          }
+        }
 
         const workBody = document.getElementById("pvWorkItemsBody");
         workBody.innerHTML = invoiceDraft.workItems
@@ -338,14 +668,27 @@
 
         const expenseBody = document.getElementById("pvExpenseItemsBody");
         expenseBody.innerHTML = invoiceDraft.expenseItems
-          .map(
-            (item) => `
+          .map((item) => {
+            // The auto-generated line item's amount is derived (not
+            // user-entered) while in "calculated" mode — render it as
+            // read-only text instead of an editable input so there's no
+            // input to edit that would just get overwritten on the next
+            // render anyway. Its description stays editable either way.
+            const isDerivedAmount =
+              item.isAutoGenerated &&
+              invoiceDraft.isProductInvoice &&
+              invoiceDraft.productAmountMode === "calculated";
+            const amountCell = isDerivedAmount
+              ? `<span class="text-xs font-semibold text-slate-700">$${(Number(item.amount) || 0).toFixed(2)}</span>`
+              : `<input type="number" step="0.01" min="0" value="${item.amount}" oninput="updateExpenseItem('${item.id}','amount',this.value)" class="w-24 text-xs border border-slate-200 rounded-lg px-2 py-1" />`;
+
+            return `
               <tr>
                 <td class="px-2 py-1.5"><input type="text" value="${escapeHtml(item.description)}" oninput="updateExpenseItem('${item.id}','description',this.value)" class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
-                <td class="px-2 py-1.5"><input type="number" step="0.01" min="0" value="${item.amount}" oninput="updateExpenseItem('${item.id}','amount',this.value)" class="w-24 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5">${amountCell}</td>
                 <td class="px-2 py-1.5 text-right"><button type="button" onclick="removeExpenseItem('${item.id}')" class="text-slate-400 hover:text-rose-600"><i class="fa-solid fa-xmark"></i></button></td>
-              </tr>`,
-          )
+              </tr>`;
+          })
           .join("");
 
         const totals = computeInvoiceTotals(invoiceDraft);
@@ -485,14 +828,22 @@
           })
           .join("");
 
-        const workSection = invoiceData.workItems.length
-          ? `
+        // Product Invoice mode hides shift-derived rows from the
+        // client-facing document entirely — the underlying data is still
+        // fully present on invoiceData.workItems (see buildInvoiceSnapshot),
+        // this is purely a rendering decision. Expense/manual line items
+        // (including the auto-generated Product Invoice line item, which is
+        // just a normal entry in expenseItems) render through the existing
+        // expense path below, unaffected.
+        const workSection =
+          !invoiceData.isProductInvoice && invoiceData.workItems.length
+            ? `
             <h2>${escapeHtmlForInvoice(t.workSummary)}</h2>
             <table class="items" dir="${dir}">
               <thead><tr>${workHeaders}</tr></thead>
               <tbody>${workRows}</tbody>
             </table>`
-          : "";
+            : "";
 
         const expenseSection = invoiceData.expenseItems.length
           ? `
@@ -736,6 +1087,8 @@
           businessName: invoiceDraft.businessName,
           dateIssued: invoiceDraft.dateIssued,
           language: invoiceDraft.language,
+          isProductInvoice: !!invoiceDraft.isProductInvoice,
+          productAmountMode: invoiceDraft.productAmountMode || "calculated",
           lineItems: [
             ...snapshot.workItems.map((w) => ({ type: "work", ...w })),
             ...snapshot.expenseItems.map((e) => ({ type: "expense", ...e })),
@@ -762,6 +1115,22 @@
           nextInvoiceNumber = Math.max(nextInvoiceNumber, enteredNumber + 1);
         }
         businessName = invoiceDraft.businessName;
+
+        // Remember this project's Product Invoice description for next
+        // time — only if the auto-generated line item is still present (the
+        // user may have removed it manually in the preview, in which case
+        // there's nothing worth remembering).
+        if (invoiceDraft.isProductInvoice) {
+          const autoItem = invoiceDraft.expenseItems.find(
+            (e) => e.isAutoGenerated,
+          );
+          if (autoItem && autoItem.description) {
+            setProjectLastProductInvoiceDescription(
+              invoiceDraft.projectId,
+              autoItem.description,
+            );
+          }
+        }
 
         persistState();
         renderInvoiceHistory();
@@ -824,6 +1193,10 @@
           clientDetails: inv.clientDetails || "",
           dateIssued: inv.dateIssued,
           language: inv.language || "en",
+          // Older saved invoices (before this feature existed) won't have
+          // these fields — default to non-product-invoice behavior.
+          isProductInvoice: !!inv.isProductInvoice,
+          productAmountMode: inv.productAmountMode || "calculated",
           workItems: inv.lineItems
             .filter((li) => li.type === "work")
             .map((li) => ({
@@ -841,6 +1214,7 @@
               sourceExpenseId: null,
               description: li.description,
               amount: Number(li.amount) || 0,
+              isAutoGenerated: !!li.isAutoGenerated,
             })),
           discount: Number(inv.discount) || 0,
           // Older saved invoices (before this feature existed) won't have
