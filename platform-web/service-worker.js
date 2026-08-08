@@ -17,13 +17,13 @@ const SHELL_ASSETS = [
   "shell.html",
   "manifest.json",
   "pdf-export.js",
-  "../core/state.js",
-  "../core/storage.js",
-  "../core/i18n.js",
-  "../core/projects.js",
-  "../core/shift-tracking.js",
-  "../core/invoicing.js",
-  "../core/ui.js",
+  "./core/state.js",
+  "./core/storage.js",
+  "./core/i18n.js",
+  "./core/projects.js",
+  "./core/shift-tracking.js",
+  "./core/invoicing.js",
+  "./core/ui.js",
 ];
 
 self.addEventListener("install", (event) => {

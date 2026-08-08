@@ -1,0 +1,9 @@
+{
+  "name": "worklog-pro-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PWA shell for WorkLog Pro — reuses core/*.js via a build-time copy step (see build.js). Deployed on Vercel with Root Directory set to platform-web/.",
+  "scripts": {
+    "build": "node build.js"
+  }
+}

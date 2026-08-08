@@ -9,7 +9,7 @@
          512x512, used for the Electron build) rather than duplicating it —
          same relative-path pattern platform-electron/main.js already uses. -->
     <link rel="manifest" href="manifest.json" />
-    <link rel="apple-touch-icon" sizes="180x180" href="../icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icon.png" />
     <meta name="theme-color" content="#0f172a" />
 
     <!-- iOS Safari "Add to Home Screen" support (no native PWA install
@@ -1311,13 +1311,13 @@
     <!-- Core app logic (platform-agnostic) — loaded in dependency order.
          Each file's own header comment explains what it owns. Identical
          list and order to platform-electron/shell.html. -->
-    <script src="../core/state.js"></script>
-    <script src="../core/storage.js"></script>
-    <script src="../core/i18n.js"></script>
-    <script src="../core/projects.js"></script>
-    <script src="../core/shift-tracking.js"></script>
-    <script src="../core/invoicing.js"></script>
-    <script src="../core/ui.js"></script>
+    <script src="./core/state.js"></script>
+    <script src="./core/storage.js"></script>
+    <script src="./core/i18n.js"></script>
+    <script src="./core/projects.js"></script>
+    <script src="./core/shift-tracking.js"></script>
+    <script src="./core/invoicing.js"></script>
+    <script src="./core/ui.js"></script>
 
     <!-- Web platform adapter — the ONLY place platform-specific wiring
          lives here. core/*.js never reference window.open/print or any

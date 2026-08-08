@@ -1,0 +1,6 @@
+# Build artifacts only — copied in by build.js from the top-level core/ and
+# icon.png at build time (both locally and on Vercel). The source of truth
+# stays the top-level core/ and icon.png; these copies are never edited
+# directly and should never be committed.
+core/
+icon.png

@@ -10,7 +10,7 @@
   "background_color": "#f8fafc",
   "icons": [
     {
-      "src": "../icon.png",
+      "src": "./icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
