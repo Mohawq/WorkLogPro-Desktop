@@ -1,0 +1,19 @@
+{
+  "name": "WorkLog Pro - Time & Expense Tracker",
+  "short_name": "WorkLog Pro",
+  "description": "Time card, expense, and invoice tracking across multiple projects/customers.",
+  "start_url": "shell.html",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0f172a",
+  "background_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "../icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

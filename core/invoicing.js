@@ -621,6 +621,27 @@
     border-top: 1px solid #e2e8f0;
     padding-top: 16px;
   }
+
+  /* Print-only (web platform's window.print(), and — since printToPDF is
+     also a print rendering pass — this affects the Electron PDF too, which
+     is fine: printBackground:true already forces background colors there
+     and its margins are already 0, so this just matches the desktop output
+     rather than changing it. Deliberately does NOT touch margin-left,
+     margin-right, or text-align anywhere (those are the RTL-mirroring
+     properties on .totals/.signature-block/table.items th/td) so this
+     cannot reintroduce the RTL double-flip regression from before — the
+     existing dir="${dir}"-driven mirroring simply carries through
+     untouched into print. */
+  @media print {
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
 </style>
 </head>
 <body>
