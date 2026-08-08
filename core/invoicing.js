@@ -112,9 +112,10 @@
       // Product Invoice mode — a per-invoice toggle that hides shift-derived
       // line items from the client-facing preview/PDF, replacing them with
       // one editable manual line item. Injects its own markup into the
-      // Create Invoice modal on first use rather than living in shell.html:
-      // core/ must work identically across every platform shell (Electron,
-      // web) without any of them needing a matching markup change.
+      // Create Invoice modal on first use rather than living in a platform
+      // shell's HTML file: core/ must work identically across every
+      // platform shell (Electron, web) without any of them needing a
+      // matching markup change.
       function ensureProductInvoiceCreateUI() {
         if (document.getElementById("productInvoiceSection")) return;
 
