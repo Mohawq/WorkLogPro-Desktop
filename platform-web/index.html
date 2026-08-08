@@ -83,23 +83,24 @@
     class="bg-slate-50 text-slate-800 min-h-screen"
     style="padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px))"
   >
-    <!-- Top Navigation Header: compact, ~60-70px incl. safe-area-inset-top,
-         so the title never sits under an iPhone notch/status bar. Only
-         icon + title + project subtitle + settings button live here now —
+    <!-- Top Navigation Header: ~88-96px incl. safe-area-inset-top, so the
+         title never sits under an iPhone notch/status bar. Only icon +
+         title + project subtitle + settings button live here now —
          everything else that used to be in the header (switch project,
-         backup/restore, live clock) moved into #settingsSheet below. -->
+         backup/restore, live clock) moved into #settingsSheet below. Sized
+         per Apple HIG: 40px logo box, 17px title, 44x44 gear tap target. -->
     <header
       class="bg-slate-900 text-white shadow-md border-b border-slate-800 sticky top-0 z-40 safe-top"
     >
-      <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+      <div class="max-w-7xl mx-auto px-4 py-5 flex items-center justify-between gap-3">
         <div class="flex items-center gap-2.5 min-w-0">
           <div
-            class="bg-indigo-600/30 w-9 h-9 shrink-0 rounded-lg flex items-center justify-center border border-indigo-500/30"
+            class="bg-indigo-600/30 w-10 h-10 shrink-0 rounded-lg flex items-center justify-center border border-indigo-500/30"
           >
-            <i class="fa-solid fa-clock text-sm text-indigo-400"></i>
+            <i class="fa-solid fa-clock text-xl text-indigo-400"></i>
           </div>
           <div class="min-w-0">
-            <h1 class="text-[15px] font-medium tracking-tight text-white leading-tight truncate">
+            <h1 class="text-[17px] font-medium tracking-tight text-white leading-tight truncate">
               WorkLog Pro
             </h1>
             <p
@@ -111,11 +112,14 @@
           </div>
         </div>
 
+        <!-- w-11/h-11 (44x44px) is the tap target itself, not just padding
+             around the icon — the icon glyph's own visual size is untouched,
+             per Apple HIG's 44x44pt minimum hit-area guidance. -->
         <button
           type="button"
           onclick="openSettingsSheet()"
           title="Settings"
-          class="w-9 h-9 shrink-0 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300"
+          class="w-11 h-11 shrink-0 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300"
         >
           <i class="fa-solid fa-gear"></i>
         </button>
@@ -151,12 +155,12 @@
           <!-- Project -->
           <div>
             <h4
-              class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"
+              class="text-[13px] font-semibold text-slate-400 uppercase tracking-wider mb-2"
             >
               Project
             </h4>
             <div
-              class="flex items-center justify-between gap-2 bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200"
+              class="min-h-[56px] flex items-center justify-between gap-2 bg-slate-50 px-3.5 py-3 rounded-xl border border-slate-200"
             >
               <span class="text-xs text-slate-600 flex items-center gap-2">
                 <i class="fa-solid fa-folder-open text-indigo-500 text-xs"></i>
@@ -175,12 +179,12 @@
           <!-- Shift Settings (moved from the Timer tab) -->
           <div>
             <h4
-              class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"
+              class="text-[13px] font-semibold text-slate-400 uppercase tracking-wider mb-3"
             >
               Shift Settings
             </h4>
             <div class="space-y-4">
-              <div>
+              <div class="min-h-[56px]">
                 <label
                   for="hourlyRate"
                   class="block text-xs font-medium text-slate-700 mb-1"
@@ -199,14 +203,14 @@
                     step="0.50"
                     min="0"
                     onchange="saveRate()"
-                    class="block w-full rounded-xl border-slate-300 pl-8 pr-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="block w-full min-h-[44px] rounded-xl border-slate-300 pl-8 pr-3 py-2.5 text-base border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   />
                 </div>
                 <p id="rateProjectHint" class="text-[11px] text-slate-400 mt-1">
                   Select a project to set its rate
                 </p>
               </div>
-              <div>
+              <div class="min-h-[56px]">
                 <label
                   for="notesInput"
                   class="block text-xs font-medium text-slate-700 mb-1"
@@ -216,11 +220,11 @@
                   type="text"
                   id="notesInput"
                   placeholder="Task details, job code..."
-                  class="block w-full rounded-xl border-slate-300 px-3 py-2 text-sm border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="block w-full min-h-[44px] rounded-xl border-slate-300 px-3 py-2.5 text-base border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
               </div>
 
-              <div class="border-t border-slate-100 pt-4">
+              <div class="min-h-[56px] border-t border-slate-100 pt-4">
                 <label class="block text-xs font-medium text-slate-700 mb-1"
                   >Invoice Signature</label
                 >
@@ -265,7 +269,7 @@
           <!-- Data -->
           <div>
             <h4
-              class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3"
+              class="text-[13px] font-semibold text-slate-400 uppercase tracking-wider mb-3"
             >
               Data
             </h4>
@@ -273,13 +277,13 @@
               <button
                 onclick="exportData()"
                 title="Backup data to file"
-                class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2"
+                class="min-h-[44px] px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2"
               >
                 <i class="fa-solid fa-download text-indigo-500"></i> Backup
               </button>
               <label
                 title="Restore data from backup file"
-                class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
+                class="min-h-[44px] px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
               >
                 <i class="fa-solid fa-upload text-emerald-600"></i> Restore
                 <input
@@ -402,7 +406,7 @@
             <h2 class="text-base font-bold text-slate-800">Shift Tracker</h2>
             <span
               id="shiftTimer"
-              class="font-mono text-sm font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg"
+              class="font-mono text-xl font-semibold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg"
               >00h 00m 00s</span
             >
           </div>
