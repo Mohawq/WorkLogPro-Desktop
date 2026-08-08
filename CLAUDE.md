@@ -184,6 +184,8 @@ The app supports multiple projects/customers (e.g. "Almurooj School" plus others
 
 iOS safe-area handling: the viewport meta tag includes `viewport-fit=cover`, and the header/bottom-tab-bar padding uses `env(safe-area-inset-top/bottom, <fallback>)` so content clears the iPhone notch/status bar and home indicator.
 
+**Sizing convention going forward**: `platform-web/`'s mobile UI follows Apple Human Interface Guidelines — every interactive element (buttons, icon buttons, form fields) needs a minimum 44x44px tap target, and text inputs need a minimum 16px font-size (avoids iOS Safari's zoom-on-focus behavior). Apply this to any new element added to `platform-web/index.html`, not just the ones already sized this way.
+
 **This mobile redesign is `platform-web/`-only.** `platform-electron/shell.html` still uses its original single-page, non-tabbed layout and was not touched by it — the desktop app's UI is unaffected. If a feature needs to add a new `core/ui.js`-rendered element, it must be given an id and manually placed inside the correct tab wrapper in `platform-web/index.html` — there's no automatic routing (see also Rule 6 in section 5).
 
 **Service worker** (`platform-web/service-worker.js`): caches the app shell (`index.html`, `manifest.json`, `pdf-export.js`, `mobile-nav.js`, `core/*.js`) for PWA installability and faster repeat visits. It is **not** an offline data-sync layer — `core/storage.js` is still plain `localStorage`, entirely unaware this cache exists. `CACHE_NAME` must be bumped (see the file's own comments) any time `SHELL_ASSETS` changes, or returning visitors keep serving the stale asset list forever.
