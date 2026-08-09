@@ -263,6 +263,77 @@
                   Appears automatically on every generated invoice.
                 </p>
               </div>
+
+              <!-- Cloud Sync (Supabase) — see core/auth.js/core/sync.js.
+                   Markup only here; all behavior lives in core/, identical
+                   ids to platform-electron/shell.html's copy of this
+                   block. Sized per the HIG convention below: 44px min tap
+                   targets, 16px input font-size (no iOS zoom-on-focus). -->
+              <div class="min-h-[44px] border-t border-slate-100 pt-4">
+                <label class="block text-xs font-medium text-slate-700 mb-2">
+                  Cloud Sync
+                </label>
+
+                <div id="authSignedOutSection" class="space-y-2">
+                  <form
+                    onsubmit="handleSendMagicLink(event)"
+                    class="flex gap-2"
+                  >
+                    <input
+                      type="email"
+                      id="authEmailInput"
+                      required
+                      placeholder="you@example.com"
+                      class="flex-1 min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      id="authSendMagicLinkBtn"
+                      class="min-h-[44px] px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-semibold rounded-xl transition shrink-0"
+                    >
+                      Send Magic Link
+                    </button>
+                  </form>
+                  <p id="authStatusMessage" class="text-[11px] text-slate-400"></p>
+                </div>
+
+                <div id="authSignedInSection" class="hidden space-y-2">
+                  <p class="text-xs text-slate-600">
+                    Signed in as
+                    <span id="authUserEmail" class="font-medium"></span>
+                  </p>
+                  <p id="authLastSyncedText" class="text-[11px] text-slate-400">
+                    Not synced yet
+                  </p>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      id="authSyncNowBtn"
+                      onclick="handleSyncNowClick()"
+                      class="min-h-[44px] px-3 py-2 bg-indigo-50 hover:bg-indigo-100 disabled:bg-slate-100 disabled:text-slate-400 text-indigo-700 text-xs font-semibold rounded-xl border border-indigo-200 transition"
+                    >
+                      Sync Now
+                    </button>
+                    <button
+                      type="button"
+                      onclick="handleSignOutClick()"
+                      class="min-h-[44px] px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+
+                  <!-- Sync Conflicts — see core/auth.js's
+                       renderSyncConflicts(). Hidden whenever syncConflicts
+                       is empty (the normal case). -->
+                  <div id="syncConflictsSection" class="hidden pt-2 border-t border-rose-100">
+                    <p class="text-[11px] font-semibold text-rose-600 uppercase tracking-wider mb-1">
+                      Sync Conflicts
+                    </p>
+                    <ul id="syncConflictsList" class="space-y-1.5 text-xs text-slate-600"></ul>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1227,6 +1298,14 @@
                   oninput="renderInvoiceLivePreview()"
                   class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
+                <!-- Shown when invoiceDraft.numberSource === "server" — see
+                     openInvoicePreview() in core/invoicing.js. Whatever was
+                     typed in the Create modal's Invoice Number field gets
+                     silently overridden by the server-assigned number in
+                     that case; this is what actually tells the user so. -->
+                <p id="pvNumberSourceHint" class="hidden text-[11px] text-indigo-600 mt-1">
+                  <i class="fa-solid fa-circle-info"></i> Auto-assigned by sync (this device is online and signed in) — overrides any number typed when creating the invoice.
+                </p>
               </div>
             </div>
             <div>
@@ -1422,11 +1501,20 @@
         </div>
       </div>
     </div>
+    <!-- Supabase JS (CDN UMD build) — must load before core/sync.js and
+         core/auth.js, the only two core/*.js files allowed to reference
+         the `supabase` global it defines. Same CDN-script pattern already
+         used for Tailwind/FontAwesome above; no bundler in this repo. -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
     <!-- Core app logic (platform-agnostic) — loaded in dependency order.
          Each file's own header comment explains what it owns. Identical
          list and order to platform-electron/shell.html. -->
     <script src="./core/state.js"></script>
     <script src="./core/storage.js"></script>
+    <script src="./core/sync-queue.js"></script>
+    <script src="./core/sync.js"></script>
+    <script src="./core/auth.js"></script>
     <script src="./core/i18n.js"></script>
     <script src="./core/projects.js"></script>
     <script src="./core/shift-tracking.js"></script>

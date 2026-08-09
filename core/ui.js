@@ -9,6 +9,7 @@
       window.addEventListener("DOMContentLoaded", () => {
         loadStoredData();
         initProjectFlow();
+        initAuthUI(); // async — checks session, renders settings-sheet auth state, kicks off first sync cycle if already signed in
         updateClock();
         setInterval(updateClock, 1000);
         renderUI();
@@ -78,6 +79,7 @@
         renderStats();
         renderInvoiceHistory();
         renderSignatureSettings();
+        renderAuthSettings();
       }
 
       // Render shift logs table (active project only)
@@ -240,6 +242,7 @@
               hourlyRate: rateVal,
               notes: notesVal || "Manual Entry",
             };
+            stampAndSync("logs", logs[index]);
           }
         } else {
           const newLog = {
@@ -253,6 +256,7 @@
             hourlyRate: rateVal,
             notes: notesVal || "Manual Entry",
           };
+          stampAndSync("logs", newLog);
           logs.unshift(newLog);
         }
 
@@ -263,6 +267,27 @@
       }
 
       function deleteLog(id) {
+        const record = logs.find((l) => l.id === id);
+        if (record) {
+          record.deletedAt = getMsTimestamp();
+          // Deletion is just an upsert with deleted_at set (see
+          // migrations/002_worklogpro_sync_rpc.sql's header comment) — the
+          // actual push payload is this stamped record, not the
+          // pendingDeletions entry below (that's local bookkeeping only).
+          stampAndSync("logs", record);
+          // Full snapshot (post-stampAndSync) rather than just {table, id,
+          // deletedAt} — needed so reconcileLocalWithServer() (core/sync.js)
+          // can rebuild and re-enqueue this deletion if the queued op is
+          // lost before it pushes (e.g. signOut() clearing the queue); the
+          // upsert_shift RPC has no separate delete-by-id form.
+          pendingDeletions.push({
+            table: "logs",
+            id,
+            deletedAt: record.deletedAt,
+            synced: false,
+            record: { ...record },
+          });
+        }
         logs = logs.filter((l) => l.id !== id);
         saveLogs();
         renderUI();
@@ -314,6 +339,7 @@
             newExpense.fileType = file.type;
             newExpense.fileData = evt.target.result;
 
+            stampAndSync("expenses", newExpense);
             expenses.unshift(newExpense);
             saveExpenses();
             renderUI();
@@ -321,6 +347,7 @@
           };
           reader.readAsDataURL(file);
         } else {
+          stampAndSync("expenses", newExpense);
           expenses.unshift(newExpense);
           saveExpenses();
           renderUI();
@@ -373,6 +400,19 @@
       }
 
       function deleteExpense(id) {
+        const record = expenses.find((e) => e.id === id);
+        if (record) {
+          record.deletedAt = getMsTimestamp();
+          stampAndSync("expenses", record);
+          // Full snapshot — see deleteLog()'s comment for why.
+          pendingDeletions.push({
+            table: "expenses",
+            id,
+            deletedAt: record.deletedAt,
+            synced: false,
+            record: { ...record },
+          });
+        }
         expenses = expenses.filter((e) => e.id !== id);
         saveExpenses();
         renderUI();

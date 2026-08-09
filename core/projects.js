@@ -153,6 +153,7 @@
           hourlyRate: rate,
           createdAt: new Date().toISOString(),
         };
+        stampAndSync("projects", project);
         projects.push(project);
         activeProjectId = project.id;
 
@@ -196,6 +197,13 @@
       // one can pre-fill it. Caller is responsible for persisting —
       // invoicing.js's saveInvoiceRecord() already calls persistState()
       // right after this, so this doesn't call it a second time itself.
+      //
+      // Deliberately does NOT call stampAndSync(): the projects table has
+      // no lastProductInvoiceDescription column (see
+      // migrations/001_worklogpro_schema.sql), so there's nothing for a
+      // push to actually carry — stamping updatedAt here would just make
+      // this project look edited every time an invoice is created, for a
+      // field the server can never receive.
       function setProjectLastProductInvoiceDescription(projectId, description) {
         const project = projects.find((p) => p.id === projectId);
         if (!project || !description) return;
@@ -211,6 +219,7 @@
           parseFloat(document.getElementById("hourlyRate").value) || 0;
         if (project) {
           project.hourlyRate = value;
+          stampAndSync("projects", project);
           persistState();
         }
         renderStats();

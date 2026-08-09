@@ -95,9 +95,71 @@
               signatureImage,
               projects,
               activeProjectId,
+              pendingDeletions,
+              syncCursor,
+              userSettingsUpdatedAt,
+              syncConflicts,
             }),
           );
         } catch (e) {}
+      }
+
+      // Maps a wt_state array name to the Supabase table it syncs to —
+      // only "logs" differs (the server table is "shifts", covering both
+      // completed logs and the single in-progress currentShift via
+      // status). Exported as a function (not a bare object literal at
+      // module scope) so core/sync.js can reuse the exact same mapping
+      // rather than hardcoding its own copy that could drift.
+      function syncTableNameFor(localTable) {
+        return localTable === "logs" ? "shifts" : localTable;
+      }
+
+      // Called at every mutation site that creates or edits a
+      // project/shift/expense/invoice record — see CLAUDE.md section 5 for
+      // the full rule. Deliberately explicit per call site rather than
+      // diffing the envelope automatically: a forgotten stampAndSync() call
+      // means the feature visibly never syncs during testing, instead of
+      // silently missing updatedAt for reasons that surface weeks later.
+      //
+      // Does NOT call persistState() — callers still do that themselves
+      // exactly as before. This only stamps the timestamp and enqueues the
+      // local (IndexedDB) sync-queue write; the actual network push happens
+      // later, in core/sync.js's pushPendingOps().
+      //
+      // record.syncId is assigned here the first time a record is stamped
+      // (i.e. at creation) and left untouched on every later edit — see
+      // generateUUID()'s comment in state.js for why this is a separate
+      // field from the local `id`.
+      function stampAndSync(table, record) {
+        if (!record.syncId) record.syncId = generateUUID();
+        record.updatedAt = getMsTimestamp();
+        if (typeof enqueueSyncOp === "function") {
+          enqueueSyncOp(syncTableNameFor(table), record);
+        }
+      }
+
+      // Sibling to stampAndSync() for businessName/signatureImage — the
+      // two global (not per-project, not array-item) fields that also have
+      // server-side sync support via user_settings (see
+      // migrations/002_worklogpro_sync_rpc.sql's upsert_user_settings).
+      // Not in the original mutation-site list, added because skipping a
+      // feature the applied schema already supports would silently leave
+      // it unsynced forever. Call sites: handleSignatureUpload(),
+      // removeSignature(), and saveInvoiceRecord()'s businessName update
+      // (all in core/invoicing.js).
+      function stampAndSyncSettings() {
+        userSettingsUpdatedAt = getMsTimestamp();
+        if (typeof enqueueSyncOp === "function") {
+          enqueueSyncOp("user_settings", {
+            // Sentinel syncId used only for local queue coalescing — the
+            // server row is a singleton keyed by auth.uid(), and
+            // upsert_user_settings takes no p_id param at all.
+            syncId: "__user_settings__",
+            businessName,
+            signatureImage,
+            updatedAt: userSettingsUpdatedAt,
+          });
+        }
       }
 
       function saveShift() {
@@ -160,6 +222,34 @@
 
             if (storedVersion < 3) {
               migrateToProjectModel();
+            }
+
+            // v3 -> v4: added Supabase sync. Reaching this branch means a
+            // wt_state envelope already existed, so pendingDeletions/
+            // syncCursor just default to "nothing pending yet" / "never
+            // synced" for an existing install — same treatment as every
+            // other new-field-on-old-state case above.
+            pendingDeletions = Array.isArray(parsed.pendingDeletions)
+              ? parsed.pendingDeletions
+              : [];
+            syncCursor = Number.isFinite(parsed.syncCursor)
+              ? parsed.syncCursor
+              : null;
+            userSettingsUpdatedAt = Number.isFinite(parsed.userSettingsUpdatedAt)
+              ? parsed.userSettingsUpdatedAt
+              : null;
+
+            if (storedVersion < 4) {
+              migrateV3ToV4();
+            }
+
+            // v4 -> v5: invoice numbering reconciliation + syncConflicts.
+            syncConflicts = Array.isArray(parsed.syncConflicts)
+              ? parsed.syncConflicts
+              : [];
+
+            if (storedVersion < 5) {
+              migrateV4ToV5();
             }
 
             if (storedVersion < SCHEMA_VERSION) {

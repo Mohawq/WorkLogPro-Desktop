@@ -46,6 +46,7 @@
         const reader = new FileReader();
         reader.onload = function (e) {
           signatureImage = e.target.result;
+          stampAndSyncSettings();
           persistState();
           renderSignatureSettings();
         };
@@ -54,6 +55,7 @@
 
       function removeSignature() {
         signatureImage = null;
+        stampAndSyncSettings();
         persistState();
         renderSignatureSettings();
         document.getElementById("signatureFileInput").value = "";
@@ -343,8 +345,31 @@
         recomputeProductInvoiceAmount();
       }
 
-      function handleCreateInvoiceSubmit(event) {
+      // Online + signed-in only — server numbering needs both a live
+      // network path and an authenticated RPC call (get_next_invoice_number
+      // relies on auth.uid()). navigator.onLine is a best-effort browser
+      // signal (can be wrong, e.g. captive portals), which is fine here:
+      // the RPC call below is itself wrapped in try/catch and falls back
+      // to local numbering on any failure, network-related or not.
+      async function canUseServerInvoiceNumbering() {
+        if (!isSupabaseConfigured() || !navigator.onLine) return false;
+        if (typeof getSession !== "function") return false;
+        const session = await getSession();
+        return !!session;
+      }
+
+      async function handleCreateInvoiceSubmit(event) {
         event.preventDefault();
+
+        // Disabled for the (usually brief, but real when offline-detection
+        // is slow or the RPC round-trips) async gap below — this form's
+        // submit button has no id in the markup, so event.submitter (the
+        // actual button that triggered the submit) is used instead of
+        // adding one.
+        const submitBtn = event.submitter;
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
 
         const checkedShiftIds = Array.from(
           document.querySelectorAll(".inv-shift-check:checked"),
@@ -378,9 +403,33 @@
             amount: Number(exp.amount) || 0,
           }));
 
-        const invNumber =
-          document.getElementById("invNumber").value.trim() ||
-          String(nextInvoiceNumber);
+        // Server-assigned numbering is now the primary path when online +
+        // signed in — it overrides whatever's typed in the Invoice Number
+        // field, since the whole point is a number nothing else can also
+        // claim (get_next_invoice_number() is atomic per-user server-side).
+        // Local numbering (the manual field, or the nextInvoiceNumber
+        // counter) is the offline/signed-out fallback only; those drafts
+        // get reconciled against the server before their first sync push —
+        // see pushPendingOps() in core/sync.js.
+        const manualInvNumber = document.getElementById("invNumber").value.trim();
+        let invNumber;
+        let numberSource;
+        if (await canUseServerInvoiceNumbering()) {
+          try {
+            const client = initSupabaseClient();
+            const { data, error } = await client.rpc("get_next_invoice_number");
+            if (!error && data !== null && data !== undefined) {
+              invNumber = String(data);
+              numberSource = "server";
+            }
+          } catch (e) {
+            // Network hiccup mid-call — fall through to the local fallback.
+          }
+        }
+        if (invNumber === undefined) {
+          invNumber = manualInvNumber || String(nextInvoiceNumber);
+          numberSource = "local";
+        }
 
         // Product Invoice: auto-create ONE manual line item via the same
         // mechanism addManualLineItem() uses (a plain expenseItems entry),
@@ -411,6 +460,7 @@
           savedInvoiceId: null,
           projectId: activeProjectId,
           invoiceNumber: invNumber,
+          numberSource,
           businessName: document.getElementById("invBusinessName").value.trim(),
           clientDetails: document
             .getElementById("invClientDetails")
@@ -427,8 +477,26 @@
           productAmountMode,
         };
 
+        // Provisional save: persists + queues this invoice for sync right
+        // now, before the user has previewed or exported anything. This is
+        // what makes A2's background reconciliation possible — a
+        // locally-numbered draft (numberSource: "local") can get corrected
+        // to a server-authoritative number via pushPendingOps() while
+        // still sitting in the "not yet sent" (exported: false) state,
+        // rather than the number only ever being checked once a PDF has
+        // already gone out. exportInvoiceToPDF() updates this same record
+        // (via invoiceDraft.savedInvoiceId, set below) rather than creating
+        // a second one. Deliberately excluded from Invoice History
+        // (renderInvoiceHistory() filters on `exported`) so an
+        // unexported/abandoned draft doesn't show up as if it were sent.
+        saveInvoiceRecord(buildInvoiceSnapshot(invoiceDraft), { exported: false });
+
         closeCreateInvoiceModal();
         openInvoicePreview();
+
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
       }
 
       function computeInvoiceTotals(draft) {
@@ -493,6 +561,19 @@
           invoiceDraft.invoiceNumber;
         document.getElementById("pvDateIssued").value = invoiceDraft.dateIssued;
         document.getElementById("pvDiscount").value = invoiceDraft.discount;
+
+        // Tells the user their auto-assigned number overrode whatever they
+        // typed in the Create modal — see A1 in core/sync.js/CLAUDE.md
+        // section 4K. Set once here rather than kept live in
+        // renderInvoiceEditor(): numberSource doesn't change mid-edit under
+        // any normal flow, so a one-time set on open is enough.
+        const numberSourceHint = document.getElementById("pvNumberSourceHint");
+        if (numberSourceHint) {
+          numberSourceHint.classList.toggle(
+            "hidden",
+            invoiceDraft.numberSource !== "server",
+          );
+        }
 
         const sigWrap = document.getElementById("pvSignatureToggleWrap");
         if (signatureImage) {
@@ -1063,7 +1144,7 @@
             return;
           }
 
-          saveInvoiceRecord(snapshot);
+          saveInvoiceRecord(snapshot, { exported: true });
           alert(`Invoice exported to:\n${result.filePath}`);
         } catch (err) {
           alert(`PDF export failed: ${err.message}`);
@@ -1073,17 +1154,37 @@
         }
       }
 
-      function saveInvoiceRecord(snapshot) {
+      // options.exported, when passed, always wins — the two real callers
+      // (the provisional save in handleCreateInvoiceSubmit() and the
+      // post-export save in exportInvoiceToPDF()) both pass it explicitly.
+      // On an update with nothing passed, the existing record's value
+      // carries over rather than defaulting — an already-tracked
+      // exported/numberSource state should never quietly flip back.
+      function saveInvoiceRecord(snapshot, options = {}) {
         const now = new Date().toISOString();
         const enteredNumber = parseInt(invoiceDraft.invoiceNumber, 10);
         const existingIdx = invoiceDraft.savedInvoiceId
           ? invoices.findIndex((inv) => inv.id === invoiceDraft.savedInvoiceId)
           : -1;
 
+        const exported =
+          options.exported !== undefined
+            ? options.exported
+            : existingIdx !== -1
+              ? invoices[existingIdx].exported
+              : true; // conservative default for any other/future caller — never renumber by surprise
+
+        const numberSource =
+          existingIdx !== -1
+            ? invoices[existingIdx].numberSource || "local"
+            : invoiceDraft.numberSource || "local";
+
         const record = {
           id: invoiceDraft.savedInvoiceId || Date.now(),
           projectId: invoiceDraft.projectId || activeProjectId,
           invoiceNumber: invoiceDraft.invoiceNumber,
+          numberSource,
+          exported,
           clientDetails: invoiceDraft.clientDetails,
           businessName: invoiceDraft.businessName,
           dateIssued: invoiceDraft.dateIssued,
@@ -1106,16 +1207,21 @@
         };
 
         if (existingIdx !== -1) {
+          // Preserve the existing syncId so this push updates the same
+          // server row rather than stampAndSync minting a fresh one below.
+          record.syncId = invoices[existingIdx].syncId;
           invoices[existingIdx] = record;
         } else {
           invoices.unshift(record);
           invoiceDraft.savedInvoiceId = record.id;
         }
+        stampAndSync("invoices", record);
 
         if (!isNaN(enteredNumber)) {
           nextInvoiceNumber = Math.max(nextInvoiceNumber, enteredNumber + 1);
         }
         businessName = invoiceDraft.businessName;
+        stampAndSyncSettings();
 
         // Remember this project's Product Invoice description for next
         // time — only if the auto-generated line item is still present (the
@@ -1145,8 +1251,13 @@
         const emptyState = document.getElementById("emptyInvoiceState");
         if (!tbody || !emptyState) return;
 
+        // exported !== false (not "=== true") so pre-v5 records — which
+        // never had the field and were always born already-exported under
+        // the old export-gated flow — still show up without needing their
+        // own special case; only an explicit false (a provisional,
+        // not-yet-sent draft — see handleCreateInvoiceSubmit()) is hidden.
         const activeInvoices = invoices.filter(
-          (inv) => inv.projectId === activeProjectId,
+          (inv) => inv.projectId === activeProjectId && inv.exported !== false,
         );
 
         tbody.innerHTML = "";
@@ -1230,6 +1341,26 @@
       }
 
       function deleteInvoice(id) {
+        const record = invoices.find((inv) => inv.id === id);
+        if (record) {
+          record.deletedAt = getMsTimestamp();
+          stampAndSync("invoices", record);
+          // Full snapshot (post-stampAndSync, so syncId/updatedAt/deletedAt
+          // are all already set) — not just {table, id, deletedAt}. Needed
+          // so reconcileLocalWithServer() (core/sync.js) can rebuild and
+          // re-enqueue this exact deletion if the queued op is later lost
+          // (e.g. signOut() clearing it) before it ever pushed; the
+          // upsert_invoice RPC has no separate delete-by-id form, so
+          // {table, id, deletedAt} alone isn't enough to construct a valid
+          // push.
+          pendingDeletions.push({
+            table: "invoices",
+            id,
+            deletedAt: record.deletedAt,
+            synced: false,
+            record: { ...record },
+          });
+        }
         invoices = invoices.filter((inv) => inv.id !== id);
         persistState();
         renderInvoiceHistory();

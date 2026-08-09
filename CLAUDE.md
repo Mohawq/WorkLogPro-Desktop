@@ -5,7 +5,7 @@
 WorkLog Pro Desktop is an Electron-based desktop application for tracking employee shift hours, managing daily time cards, logging reimbursable expenses, and generating client invoices — across multiple projects/customers, each tracked separately.
 
 - **Core Stack**: Electron (desktop) + a PWA (web), Vanilla JavaScript, HTML5, Tailwind CSS (CDN), FontAwesome icons.
-- **Architecture Style**: Split into a platform-agnostic `core/` layer (business logic, state, and rendering) and two thin shells that both load it unchanged: `platform-electron/` (the Windows desktop app — Electron main process, preload IPC bridge, single-page `shell.html`) and `platform-web/` (a PWA deployed to Vercel — see section 4J). Storage is still plain `localStorage` on **both** platforms, independently — there is no backend or sync between them yet (Supabase-backed sync has been discussed as a future `window.platformAdapter` backend but is not implemented anywhere).
+- **Architecture Style**: Split into a platform-agnostic `core/` layer (business logic, state, and rendering) and two thin shells that both load it unchanged: `platform-electron/` (the Windows desktop app — Electron main process, preload IPC bridge, single-page `shell.html`) and `platform-web/` (a PWA deployed to Vercel — see section 4J). Storage is local-first `localStorage` on **both** platforms — the app is fully usable signed out, exactly as before — with optional Supabase-backed cloud sync layered on top (magic-link auth, an offline IndexedDB push queue, last-write-wins conflict resolution, hybrid soft/hard delete) that keeps a signed-in user's data in sync across both platforms. See section 4K for the full picture.
 
 ## 2. Quick Reference Commands
 
@@ -18,6 +18,11 @@ WorkLog Pro Desktop is an Electron-based desktop application for tracking employ
 
 - `cd platform-web && npm run build` — runs `build.js`, which copies `../core/*.js` and `../icon.png` into `platform-web/core/` and `platform-web/icon.png` (gitignored copies — see `platform-web/.gitignore`). Required before `platform-web/index.html` will actually load `core/` locally; Vercel runs this exact same command as its build step.
 - Deployed on Vercel with **Root Directory** set to `platform-web/` and **"Include source files outside of the Root Directory in the Build Step"** enabled in Project Settings (a dashboard toggle, not a committed `vercel.json`) — without it, `../core` and `../icon.png` don't exist in the build container and the build fails. See section 4J for the full picture.
+
+### Cloud Sync Setup
+
+- `core/sync.js`'s `SUPABASE_URL`/`SUPABASE_ANON_KEY` constants ship as placeholders (`"YOUR-PROJECT-REF"`/`"YOUR-ANON-KEY"`) — fill them in with the real project's values before sync will do anything. Safe to hardcode (not secret); Supabase RLS is what actually protects the data, not obscurity of the anon key. Until filled in, `isSupabaseConfigured()` returns `false`, sync silently no-ops everywhere it's called, and a one-time `console.warn` fires — the rest of the app (both platforms, fully offline) is unaffected either way. See section 4K.
+- The schema itself lives in two already-applied SQL migrations (`001_worklogpro_schema.sql`, `002_worklogpro_sync_rpc.sql`) that aren't checked into this repo — section 4K documents the contract they establish; treat that section, not a re-read of the SQL, as the source of truth for what's live in Supabase.
 
 ### Graphify Knowledge Graph Commands
 
@@ -34,13 +39,16 @@ WorkLog Pro Desktop is an Electron-based desktop application for tracking employ
 ```
 WorkLogPro-Desktop/
 ├── core/                    # Platform-agnostic business logic & rendering — shared by every shell
-│   ├── state.js               # wt_state shape, SCHEMA_VERSION, migrations, generateId()/getMsTimestamp()
-│   ├── storage.js              # persistState()/loadStoredData(), backup/restore (still localStorage)
-│   ├── i18n.js                  # EN/AR invoice strings (INVOICE_I18N)
-│   ├── projects.js               # Multi-project state, picker/switch flow, per-project rate editing
-│   ├── shift-tracking.js          # Clock in/out, break start/end/adjust, timer display
-│   ├── invoicing.js                # Invoice creation, editable preview, generateInvoiceHTML(), PDF export, signature — largest core file
-│   └── ui.js                        # Shared render functions, expense/log CRUD, DOMContentLoaded bootstrap
+│   ├── state.js               # wt_state shape, SCHEMA_VERSION (4), migrations, generateId()/generateUUID()/getMsTimestamp()
+│   ├── storage.js              # persistState()/loadStoredData() (still localStorage), backup/restore, stampAndSync()/stampAndSyncSettings()
+│   ├── sync-queue.js            # IndexedDB pending-ops queue — no Supabase/network awareness, see section 4K
+│   ├── sync.js                   # Pushes/pulls against Supabase; the only file (with auth.js) allowed to reference the `supabase` global
+│   ├── auth.js                    # Magic-link sign-in/out, session helpers, settings-sheet auth UI wiring
+│   ├── i18n.js                     # EN/AR invoice strings (INVOICE_I18N)
+│   ├── projects.js                  # Multi-project state, picker/switch flow, per-project rate editing
+│   ├── shift-tracking.js             # Clock in/out, break start/end/adjust, timer display
+│   ├── invoicing.js                   # Invoice creation, editable preview, generateInvoiceHTML(), PDF export, signature — largest core file
+│   └── ui.js                           # Shared render functions, expense/log CRUD, DOMContentLoaded bootstrap (now also kicks off initAuthUI())
 ├── platform-electron/       # Electron-specific shell — desktop app, single-page shell.html layout (unaffected by the platform-web mobile redesign)
 │   ├── main.js                # Electron main process (window management, system tray, PDF export IPC)
 │   ├── preload.js               # contextBridge bridge exposing window.invoiceAPI.exportPDF to the renderer
@@ -71,36 +79,39 @@ WorkLogPro-Desktop/
 
 The app is split into a shared `core/` layer (platform-agnostic business logic and UI rendering) and two shells that each load it unchanged: `platform-electron/` (the Electron-specific shell and main process) and `platform-web/` (the PWA shell — see section 4J).
 
-**`core/`** — no file here may reference `window.invoiceAPI` or any other Electron API directly. All platform-specific calls go through `window.platformAdapter`, defined once by whichever shell loads `core/`:
+**`core/`** — no file here may reference `window.invoiceAPI` or any other Electron API directly. All platform-specific calls go through `window.platformAdapter`, defined once by whichever shell loads `core/`. **Exception**: `sync.js` and `auth.js` reference the global `supabase` object (loaded via CDN in each shell) directly, not through `window.platformAdapter` — the Supabase JS client behaves identically in the Electron renderer and a browser, so it isn't platform-specific behavior under this same split. Only genuinely platform-different capabilities (PDF export today) go through the adapter — see section 4K.
 
-- `state.js` — `wt_state` shape, `SCHEMA_VERSION`, migrations, `generateId()`/`getMsTimestamp()` utilities.
-- `storage.js` — `persistState()`/`loadStoredData()`, backup/restore (`exportData()`/`importData()`).
+- `state.js` — `wt_state` shape, `SCHEMA_VERSION`, migrations, `generateId()`/`generateUUID()`/`getMsTimestamp()` utilities.
+- `storage.js` — `persistState()`/`loadStoredData()`, backup/restore (`exportData()`/`importData()`), and `stampAndSync()`/`stampAndSyncSettings()` (section 4K).
+- `sync-queue.js` — local IndexedDB queue of not-yet-pushed sync operations; no Supabase or network awareness at all.
+- `sync.js` — pushes/pulls against the Supabase tables and RPC functions described in section 4K.
+- `auth.js` — magic-link sign-in/out, session helpers (`getSession()`/`onAuthStateChange()`), and the settings-sheet auth UI (`renderAuthSettings()`, `handleSendMagicLink()`, `handleSyncNowClick()`, `handleSignOutClick()`).
 - `i18n.js` — EN/AR strings (`INVOICE_I18N`).
 - `projects.js` — multi-project state, picker/switch logic, per-project rate editing.
 - `shift-tracking.js` — clock in/out, break start/end/adjust, timer display logic.
 - `invoicing.js` — invoice creation, editable preview, PDF HTML generation, and signature handling. The largest core file.
-- `ui.js` — shared render/DOM update functions, expense/log CRUD, and the `DOMContentLoaded` bootstrap.
+- `ui.js` — shared render/DOM update functions, expense/log CRUD, and the `DOMContentLoaded` bootstrap (also calls `initAuthUI()`).
 
 **`platform-electron/`** — the only place platform-specific wiring is allowed to live:
 
 - `main.js` — Electron main process.
 - `preload.js` — IPC bridge, exposes `window.invoiceAPI`.
-- `shell.html` — loads every `core/*.js` file (in dependency order: `state → storage → i18n → projects → shift-tracking → invoicing → ui`), holds the app's HTML markup (byte-identical to the old `index.html`'s), and defines `window.platformAdapter`, which wraps `window.invoiceAPI` calls.
+- `shell.html` — loads the Supabase CDN script, then every `core/*.js` file (in dependency order: `state → storage → sync-queue → sync → auth → i18n → projects → shift-tracking → invoicing → ui`), holds the app's HTML markup (byte-identical to the old `index.html`'s, plus the Cloud Sync block added under Shift Settings — section 4K), and defines `window.platformAdapter`, which wraps `window.invoiceAPI` calls.
 
-This split is what lets `platform-web/` — a PWA that now **exists and is deployed to Vercel** (see section 4J for the full picture) — load the exact same `core/*.js` files, define its own `window.platformAdapter` (backed by `window.open()`+`print()` for PDF export and a service worker for install/offline-shell caching only — storage is still plain `localStorage`, same as Electron, **not** Supabase), and reuse all of the business logic with zero changes to `core/`.
+This split is what lets `platform-web/` — a PWA that now **exists and is deployed to Vercel** (see section 4J for the full picture) — load the exact same `core/*.js` files, define its own `window.platformAdapter` (backed by `window.open()`+`print()` for PDF export and a service worker for install/offline-shell caching only), and reuse all of the business logic with zero changes to `core/`. Cloud sync (section 4K) is likewise identical on both platforms — it lives entirely in `core/sync.js`/`core/auth.js`, not the adapter, since the Supabase client isn't a platform-specific capability.
 
 **Old `index.html`** — the one at the project **root** (not `platform-web/index.html`, which is a different, currently-active file — see section 4J) — still exists but is **unused and deprecated**, kept temporarily as a rollback reference in case the split needs to be reverted, scheduled for deletion once the split is confirmed stable in production use. Do not edit it or add features to it; add new logic to the appropriate `core/*.js` file instead.
 
 ### B. Core Functions
 
-- `consolidateDailyLogs()`: Groups and merges multiple work sessions on the same calendar day into a single daily shift entry. Runs over the full flat `logs[]` array across **all** projects, so it groups by a composite `projectId + date` key, not date alone — grouping by date alone would silently merge two different projects' shifts that happen to fall on the same day.
-- `renderUI()`: Central re-render entry point — refreshes the clock status badge, the project badge, logs/expenses tables, stats, invoice history, and signature settings. Call this (or the more specific render function) after any state mutation.
+- `consolidateDailyLogs()`: Groups and merges multiple work sessions on the same calendar day into a single daily shift entry. Runs over the full flat `logs[]` array across **all** projects, so it groups by a composite `projectId + date` key, not date alone — grouping by date alone would silently merge two different projects' shifts that happen to fall on the same day. When sync is on, the merged result's `id`/`syncId` are taken from the *oldest* session in the group (not `group[0]`, which is whichever session was most recently `unshift()`ed) so the push updates that session's existing server row rather than creating a duplicate — see section 4K's known-gaps note for the one case this doesn't fully cover.
+- `renderUI()`: Central re-render entry point — refreshes the clock status badge, the project badge, logs/expenses tables, stats, invoice history, signature settings, and auth/sync settings. Call this (or the more specific render function) after any state mutation.
 - `renderLogsTable()` / `renderExpensesTable()` / `renderStats()`: Render the shift/expense tables and summary stats — all three read through `getActiveLogs()` / `getActiveExpenses()`, so they only ever show the **active project's** data.
-- `clockIn()`, `startBreak()`, `endBreak()`, `clockOut()`: State transitions for real-time shift timing. `clockIn()` tags the new `currentShift` with `projectId: activeProjectId`; `clockOut()` tags the resulting log entry the same way and prices it at the active project's rate.
+- `clockIn()`, `startBreak()`, `endBreak()`, `clockOut()`: State transitions for real-time shift timing. `clockIn()` tags the new `currentShift` with `projectId: activeProjectId`; `clockOut()` tags the resulting log entry the same way and prices it at the active project's rate. When sync is on, `clockOut()`'s new log entry explicitly carries over `currentShift.syncId` rather than getting a fresh one, so the push transitions the same server-side `shifts` row from `status: 'active'` to `'completed'` instead of leaving an orphaned active row.
 
 ### C. State Persistence — the `wt_state` Versioned Envelope
 
-All state lives under a **single** `localStorage` key, `wt_state` (constant `STORAGE_KEY`), as one JSON envelope — not separate flat keys. Current `SCHEMA_VERSION` is **3**.
+All state lives under a **single** `localStorage` key, `wt_state` (constant `STORAGE_KEY`), as one JSON envelope — not separate flat keys. Current `SCHEMA_VERSION` is **5**.
 
 **Envelope shape** (see `persistState()`):
 
@@ -111,8 +122,14 @@ All state lives under a **single** `localStorage` key, `wt_state` (constant `STO
   currentShift, logs, expenses,
   invoices, nextInvoiceNumber, businessName, signatureImage,
   projects, activeProjectId,
+  pendingDeletions,      // v4 — local-only bookkeeping, see section 4K
+  syncCursor,             // v4 — ms timestamp of the last successful pullChanges()
+  userSettingsUpdatedAt,   // v4 — updatedAt for businessName/signatureImage together, see section 4K
+  syncConflicts,           // v5 — unresolved invoice-number collisions needing manual fix, see section 4K
 }
 ```
+
+Each `invoices[]` entry also carries `numberSource: 'server' | 'local'` and `exported: boolean` as of v5 — see section 4K's "Invoice numbering" subsection.
 
 **Load/save pattern**:
 
@@ -120,11 +137,15 @@ All state lives under a **single** `localStorage` key, `wt_state` (constant `STO
 - `loadStoredData()` — reads and parses the envelope, normalizes shape via `normalizeShift()`/`normalizeLogs()`, and runs any pending schema migration based on the stored `schemaVersion` before persisting the upgraded shape once.
 - `migrateLegacyKeys()` — one-time upgrade path for installs from **before** the `wt_state` envelope existed at all (the old flat `wt_hourly_rate` / `wt_active_shift` / `wt_shift_logs` / `wt_expenses` keys). Only runs when `wt_state` is entirely absent; removes the old keys once migrated.
 - `migrateToProjectModel()` — the v2→v3 migration (see below); also invoked from `migrateLegacyKeys()` if that old-format data actually existed, so pre-v1 installs land directly on the current multi-project shape.
+- `migrateV3ToV4()` — the v3→v4 migration (see below); also invoked from `migrateLegacyKeys()` for the same reason as `migrateToProjectModel()` above.
+- `migrateV4ToV5()` — the v4→v5 migration (see below); same "also invoked from `migrateLegacyKeys()`" treatment, though it's a no-op there in practice (a pre-v1 install can't have any invoices — invoicing is a v2 feature).
 
 **What each schema version added:**
 
 - **v2** — Invoicing: `invoices[]`, `nextInvoiceNumber`, `businessName`, `signatureImage`.
 - **v3** — Multi-project support: `projects[]`, `activeProjectId`, and a `projectId` field tagged onto `currentShift` and every `logs[]`/`expenses[]`/`invoices[]` entry. The old global `hourlyRate` is kept in the envelope but is no longer the source of truth for new shifts — it's read-only, used only as the migration seed for the first auto-created project and as a last-resort fallback.
+- **v4** — Supabase sync (section 4K): `updatedAt` + `syncId` stamped onto every `projects[]`/`logs[]`/`expenses[]`/`invoices[]` entry and `currentShift` (seeded "now" for pre-existing records, since they have no real edit history worth preserving), plus the three top-level fields shown above. `syncId` is a real uuid (`generateUUID()`), deliberately separate from the existing `id` field — see section 4K for why.
+- **v5** — Invoice numbering reconciliation + conflict surfacing (section 4K): `numberSource`/`exported` on every `invoices[]` entry (pre-existing invoices default to `numberSource: 'local'`, `exported: true` — they were all created under the old export-gated flow, so their mere existence implies they were already sent), plus the new top-level `syncConflicts`.
 
 ### D. Active Break Editing
 
@@ -132,13 +153,13 @@ All state lives under a **single** `localStorage` key, `wt_state` (constant `STO
 
 ### E. Invoicing
 
-**Flow**: `openCreateInvoiceModal()` (prefills "Bill To" with the active project's name) → `loadInvoiceRecordsForRange()` (builds a checklist of the active project's shifts/expenses within a date range) → `handleCreateInvoiceSubmit()` (builds `invoiceDraft` from the checked items) → `openInvoicePreview()`.
+**Flow**: `openCreateInvoiceModal()` (prefills "Bill To" with the active project's name) → `loadInvoiceRecordsForRange()` (builds a checklist of the active project's shifts/expenses within a date range) → `handleCreateInvoiceSubmit()` (async — assigns the invoice number, builds `invoiceDraft` from the checked items, and provisionally saves it — see section 4K) → `openInvoicePreview()`.
 
 **Editable preview**: the preview modal is a real editable form (`renderInvoiceEditor()` renders inline-editable work/expense line items, a manual "add line item" option, and a discount field) bound to `invoiceDraft`. Every edit calls `renderInvoiceLivePreview()`, which rebuilds a read-only iframe from `generateInvoiceHTML(invoiceData, lang)` — **the same function** used to generate the exported PDF, so the preview is guaranteed to match what gets printed.
 
 **PDF export**: `exportInvoiceToPDF()` (in `core/invoicing.js`) calls `window.platformAdapter.exportPDF(html, suggestedFileName)` — never `window.invoiceAPI` directly, per the core/platform split in section 4A. In `platform-electron/shell.html`, `window.platformAdapter.exportPDF` wraps `window.invoiceAPI.exportPDF`, which `platform-electron/preload.js` exposes via `contextBridge`. Because `platform-electron/main.js` sets `contextIsolation: true` (and `nodeIntegration: false`) on the `BrowserWindow`, the renderer has no direct filesystem or `printToPDF` access — `preload.js` is the only sanctioned bridge, forwarding to `ipcMain.handle('export-invoice-pdf', ...)` in `main.js`, which opens a native save dialog, renders the HTML in a hidden offscreen `BrowserWindow`, and calls `webContents.printToPDF()`. Do not "simplify" this by relaxing `contextIsolation`/adding `nodeIntegration`, or by having `core/invoicing.js` call `window.invoiceAPI` directly — extend `window.platformAdapter` and the preload bridge instead.
 
-**History & numbering**: successful exports call `saveInvoiceRecord()`, which upserts into `invoices[]` (tagged with `projectId`) and advances `nextInvoiceNumber`. `renderInvoiceHistory()` and `reopenInvoice()` are scoped to the active project the same way the shift/expense tables are.
+**History & numbering**: `saveInvoiceRecord(snapshot, options)` upserts into `invoices[]` (tagged with `projectId`) and advances `nextInvoiceNumber` — called from **two** places now, not just export: `handleCreateInvoiceSubmit()` (provisional save, `{ exported: false }`) and `exportInvoiceToPDF()`'s success path (`{ exported: true }`, updating the same record via `invoiceDraft.savedInvoiceId` rather than creating a second one). See section 4K for why, and for the actual number-assignment logic (`numberSource: 'server' | 'local'`). `renderInvoiceHistory()` is scoped to the active project the same way the shift/expense tables are, **and** filters out `exported === false` — an invoice that's been created but not yet sent doesn't show up there, so an abandoned draft doesn't look like a sent one. `reopenInvoice()` is unaffected by any of this — it only ever operates on invoices the history table already shows, i.e. already-exported ones.
 
 ### F. English/Arabic Invoice Language (RTL)
 
@@ -176,7 +197,7 @@ The app supports multiple projects/customers (e.g. "Almurooj School" plus others
 
 **Build step** (`platform-web/build.js`, run via `npm run build` inside `platform-web/`, and by Vercel automatically as its build command): copies `../core/*.js` → `platform-web/core/*.js` and `../icon.png` → `platform-web/icon.png`. These copies are gitignored (`platform-web/.gitignore`) — the root `core/` is always the one source of truth; the copies are regenerated on every build and must never be hand-edited.
 
-**Entry point is `index.html`, not `shell.html`**: unlike `platform-electron/shell.html`, this file is named `index.html` because Vercel (like any static host) serves `index.html` automatically at `/` — a file named `shell.html` would need extra routing config to be the default page. `platform-web/index.html` loads `core/*.js` in the same dependency order as `platform-electron/shell.html` (`state → storage → i18n → projects → shift-tracking → invoicing → ui`), then `pdf-export.js`, then `mobile-nav.js`, and defines its own `window.platformAdapter`.
+**Entry point is `index.html`, not `shell.html`**: unlike `platform-electron/shell.html`, this file is named `index.html` because Vercel (like any static host) serves `index.html` automatically at `/` — a file named `shell.html` would need extra routing config to be the default page. `platform-web/index.html` loads the Supabase CDN script, then `core/*.js` in the same dependency order as `platform-electron/shell.html` (`state → storage → sync-queue → sync → auth → i18n → projects → shift-tracking → invoicing → ui`), then `pdf-export.js`, then `mobile-nav.js`, and defines its own `window.platformAdapter`.
 
 **`window.platformAdapter.exportPDF`** here is `webPrintExport()` (`platform-web/pdf-export.js`): opens a blank window synchronously (so the browser doesn't treat it as a blocked popup), `document.write()`s the same `generateInvoiceHTML()` output every other platform uses, and calls `.print()` — the user picks "Save as PDF" (or an actual printer) themselves from the native print dialog. There's no filesystem access on the web, so unlike Electron this never produces a real file path; `result.filePath` is a human-readable placeholder string only, present for interface parity with the Electron adapter.
 
@@ -188,9 +209,45 @@ iOS safe-area handling: the viewport meta tag includes `viewport-fit=cover`, and
 
 **This mobile redesign is `platform-web/`-only.** `platform-electron/shell.html` still uses its original single-page, non-tabbed layout and was not touched by it — the desktop app's UI is unaffected. If a feature needs to add a new `core/ui.js`-rendered element, it must be given an id and manually placed inside the correct tab wrapper in `platform-web/index.html` — there's no automatic routing (see also Rule 6 in section 5).
 
-**Service worker** (`platform-web/service-worker.js`): caches the app shell (`index.html`, `manifest.json`, `pdf-export.js`, `mobile-nav.js`, `core/*.js`) for PWA installability and faster repeat visits. It is **not** an offline data-sync layer — `core/storage.js` is still plain `localStorage`, entirely unaware this cache exists. `CACHE_NAME` must be bumped (see the file's own comments) any time `SHELL_ASSETS` changes, or returning visitors keep serving the stale asset list forever.
+**Service worker** (`platform-web/service-worker.js`): caches the app shell (`index.html`, `manifest.json`, `pdf-export.js`, `mobile-nav.js`, `core/*.js`) for PWA installability and faster repeat visits. It is **not** an offline data-sync layer — `core/storage.js` is still plain `localStorage`, entirely unaware this cache exists (that's `core/sync.js`'s job — section 4K — and it's a separate mechanism from this cache). `CACHE_NAME` must be bumped (see the file's own comments) any time `SHELL_ASSETS` changes, or returning visitors keep serving the stale asset list forever.
 
-**No Supabase sync yet.** An earlier version of this document described a hypothetical `platform-web/` backed by "Supabase sync." That was aspirational and was never built — the actual adapter described above has no network or sync layer at all. Both platforms currently read/write the same `wt_state` shape independently to their own local `localStorage`, with no data sharing between them. If Supabase-backed sync is built later, it would replace/extend `window.platformAdapter` and `core/storage.js`'s load/save functions — not require a rewrite of `core/`'s business logic.
+### K. Cloud Sync (Supabase)
+
+Both platforms are **fully usable signed out**, exactly as before this feature — `wt_state` in local `localStorage` remains the single source of truth on-device either way. Signing in (magic link, section 7) layers optional cross-device sync on top: local edits queue in IndexedDB, push to Supabase, and pull back down on the other device, with last-write-wins conflict resolution. This is opt-in and additive, not a replacement for local storage.
+
+**Schema** (already applied — `001_worklogpro_schema.sql` + `002_worklogpro_sync_rpc.sql`; these two migration files aren't checked into this repo, treat this section as the contract instead of re-deriving it): a Supabase table per synced entity (`projects`, `shifts`, `expenses`, `invoices`, plus a singleton `user_settings` row per user for `business_name`/`signature_image`), each with an `updated_at` that's **client-supplied at edit time** (not a server trigger — required for last-write-wins to compare "when was this actually edited," not "when did it reach the server"), a `deleted_at` for hybrid soft-delete, and RLS scoping every row to `auth.uid()`. Deletes are just an upsert with `deleted_at` set — there's no separate delete RPC. A daily `pg_cron` job hard-deletes anything soft-deleted 7+ days ago; the soft-deleted row still syncs to other devices before that happens.
+
+**Files** (see section 4A for the one-line version of each):
+
+- `core/sync-queue.js` — a plain IndexedDB queue (`enqueueSyncOp()`/`getAllPendingOps()`/`removePendingOp()`/`clearAllPendingOps()`). Knows nothing about Supabase; coalesces repeated edits to the same record (keyed by table + `record.syncId`) into one queued op instead of piling up duplicates.
+- `core/storage.js`'s `stampAndSync(table, record)` — called explicitly at **every** mutation site that creates or edits a project/shift/expense/invoice record (see Rule 9). Sets `record.updatedAt` and assigns `record.syncId` the first time (left untouched after), then enqueues the op. Deliberately explicit per call site rather than diffing the whole envelope automatically: a forgotten call means the feature visibly never syncs during testing (easy to catch), instead of silently missing `updatedAt` for reasons that surface weeks later. `stampAndSyncSettings()` is the sibling for the two global `businessName`/`signatureImage` fields, which sync to `user_settings` but aren't array items.
+- `core/sync.js` — `pushPendingOps()` (drains the queue via the `upsert_<table>` RPCs, oldest-first, projects before everything else since shifts/expenses/invoices reference `project_id` as a uuid FK), `pullChanges()` (fetches rows newer than `syncCursor`, applies each with an LWW guard against the local record's `updatedAt`), `reconcileLocalWithServer()` (see "Sign-in reconciliation" below), and `runSyncCycle()` (push then pull, wrapped so failures never throw into UI code — a failed push leaves its op queued and stops that cycle's processing so it retries next time). Triggered by a `window.addEventListener('online', ...)` and a 5-minute `setInterval` (both registered unconditionally at load — `runSyncCycle()` itself no-ops if there's no session, which also correctly picks up sync starting mid-session right when a magic-link sign-in completes, without needing the listener/interval registered a second time from a sign-in handler).
+- `core/auth.js` — `signInWithMagicLink()`/`getSession()`/`onAuthStateChange()`/`signOut()` plus the settings-sheet UI wiring (`renderAuthSettings()`, `renderSyncConflicts()`, `handleSendMagicLink()`, `handleSyncNowClick()`, `handleSignOutClick()`). `signOut()` also clears the local pending-ops queue — an unpushed op has no per-record owner tag, so leaving it queued across a sign-out/sign-in-as-someone-else cycle on a shared device would attribute that data to the wrong account server-side (`auth.uid()` is stamped server-side at push time). This is still the right call and hasn't changed — see "Sign-in reconciliation" below for how its consequence (losing sync coverage for anything queued-but-unpushed at sign-out) is now handled instead of just accepted.
+
+**`syncId` vs. `id`**: every synced record gets a `syncId` (a real uuid) *in addition to* its existing local `id` (a `Date.now()` number, or `generateId()`'s timestamp-random string for projects) — the two are never the same field. Supabase's primary keys are `uuid`; the local `id` scheme predates this feature and is baked into onclick handlers, `Number(checkbox.value)` comparisons, and array lookups throughout `core/ui.js`/`core/invoicing.js`. Rather than migrate that whole scheme, `syncId` is the only field sent to/read from Supabase; `resolveProjectSyncId()`/`resolveLocalProjectId()` in `sync.js` translate a record's local `projectId` to/from the referenced project's `syncId` for the FK columns. `currentShift` gets its `syncId` at `clockIn()`; `clockOut()`'s resulting log entry reuses it (see section 4B) so the server-side `shifts` row transitions `active → completed` in place.
+
+**Invoice numbering**: `invoices[].invoiceNumber` comes from one of two sources, tracked in `invoices[].numberSource`:
+
+- **`'server'`** — the primary path when online + signed in. `handleCreateInvoiceSubmit()` (`core/invoicing.js`) calls the atomic `get_next_invoice_number()` RPC directly at invoice-creation time and uses its return value, overriding whatever's typed in the Invoice Number field. Two devices can never collide on a server-assigned number — the RPC is atomic per-user.
+- **`'local'`** — the offline/signed-out fallback: the manually-typed field, or `nextInvoiceNumber` if that's blank. Two different offline devices *can* pick the same local number.
+
+A locally-numbered invoice also gets `exported: false` at creation (a provisional save — `handleCreateInvoiceSubmit()` calls `saveInvoiceRecord()` immediately, before the user has previewed or exported anything, specifically so this reconciliation has something to push against). `exportInvoiceToPDF()`'s success path updates the same record to `exported: true`. `renderInvoiceHistory()` hides `exported === false` rows, so an unexported provisional draft never looks like a sent invoice.
+
+`pushPendingOps()`'s `reconcileInvoiceNumberIfNeeded()` runs before pushing any invoice op: if `numberSource === 'local'` and `exported === false`, it calls `get_next_invoice_number()`, overwrites `invoiceNumber`/`numberSource` on both the live `invoices[]` record and any currently-open `invoiceDraft`/preview form, then proceeds to push with the corrected number — a not-yet-sent local number gets fixed in the background, invisibly to the user, before it can ever collide. An **already-exported** local-numbered invoice is deliberately left alone here (renumbering something possibly already in a client's inbox would be worse than the collision it prevents) — if it genuinely collides with another device's invoice, that surfaces as a Postgres `23505` (unique violation on `invoices_user_number_idx`), which `pushOneOp()` catches specifically for the `invoices` table and routes to `syncConflicts` instead of the normal error-and-retry path (a `23505` is a real conflict, not the usual "empty result = stale write" LWW case).
+
+**`syncConflicts`** (`wt_state.syncConflicts`, schema v5): `{ table: 'invoices', id, detectedAt }` entries for exactly the case above — two already-exported invoices, different ids, same number. Deliberately never auto-resolved (it may involve a document already sent to a client); the op is removed from the push queue so it doesn't retry forever, but the invoice record itself is left completely untouched. Surfaced in the Cloud Sync settings block (both shells) via `core/auth.js`'s `renderSyncConflicts()` — a "Sync Conflicts" list, hidden whenever empty, that tells the user to open the invoice, pick a new number, and re-export if needed.
+
+**Sign-in reconciliation**: `signOut()` clearing the pending-ops queue (see "Files" above) means any edit made between the last successful sync and sign-out has nothing left in the queue once that happens, even though it's still sitting in `wt_state`. `core/sync.js`'s `reconcileLocalWithServer()` closes that gap: on sign-in, for each table it does a narrow `select('id, updated_at')` (not a full-row pull) against Supabase, then walks every local record — not present remotely, or local `updatedAt` newer than remote → re-`enqueueSyncOp()`; remote already current → leave it for the normal cursor-based `pullChanges()` to pick up. It also re-enqueues any `pendingDeletions` entry that never synced, using the full `record` snapshot each deletion call site now stores there (see Rule 9) — by the time this runs, the deleted record is already gone from its array, so that snapshot is the only way to rebuild the push. `core/auth.js`'s `initAuthUI()` calls it exactly once per sign-in — both when an existing session is restored at app launch (the actual sign-out → reopen-app → still-signed-in case this exists for) and on a fresh `SIGNED_IN` event (the magic-link path) — always *before* that sign-in's first `runSyncCycle()`, and never on a `TOKEN_REFRESHED` or other non-sign-in auth event.
+
+**Known gaps** (deliberate, not oversights — flagged here so they aren't "fixed" by surprise later):
+
+- **Invoices**: the `invoices` table has no `clientDetails`/`dateIssued` columns, and `businessName` is per-invoice locally but only stored globally server-side (in `user_settings`). All three are folded into the existing `line_items` jsonb column's `meta` key on push and unpacked back out on pull, rather than losing them — this uses the column as intended, it doesn't add anything to the applied schema.
+- **Expense attachments never sync.** The `expenses` table has no columns for `fileName`/`fileType`/`fileData` at all — a receipt uploaded on one device stays on that device; pulling the expense elsewhere gets the amount/description/date only, with no attachment.
+- **Same-day multi-shift merges**, when more than one of the merged sessions had *already independently synced before the merge* (rare — needs two clock-outs on the same project+day with a sync cycle running between them), can leave the discarded session's server row as an orphaned duplicate rather than cleaning it up. See `consolidateDailyLogs()`, section 4B.
+- **Expense dates round-trip best-effort.** `expenses[].date` is stored via `toLocaleDateString()` with no parallel ISO field (unlike logs' `startTimeISO`) — a locale-dependent, genuinely ambiguous format that predates this feature. `sync.js`'s `expenseDateToISO()` parses it back for the server's `date` column; this is reliable for a same-device round trip but not guaranteed across differently-configured devices.
+- **An abandoned invoice draft** (created via `handleCreateInvoiceSubmit()`'s provisional save, then never exported — the user closes the app, or starts a different invoice instead) leaves a permanent, invisible `exported: false` record in `invoices[]`/on the server. Harmless (excluded from Invoice History, doesn't feed into `renderStats()`, can't collide since either its number came from the atomic RPC or it's still eligible for reconciliation) but not cleaned up — no "discard draft" path exists.
+
+**Configuration**: `core/sync.js`'s `SUPABASE_URL`/`SUPABASE_ANON_KEY` ship as placeholders — see "Cloud Sync Setup" in section 2. Until filled in, every sync entry point no-ops via `isSupabaseConfigured()`.
 
 ## 5. Rules for Claude Code
 
@@ -201,4 +258,5 @@ iOS safe-area handling: the viewport meta tag includes `viewport-fit=cover`, and
 5. **Keep the graph updated**: after renaming, adding, or refactoring functions in `core/*.js` or `platform-electron/*.js`, run `graphify extract . --code-only` — this is now genuinely useful for the whole app, not just the Electron main process.
 6. **`platform-web/`'s tab grouping is markup-only.** `#tab-timer`/`#tab-expenses`/`#tab-invoices` are wrapper `<div>`s in `platform-web/index.html`; `core/ui.js` has no awareness of them and never will unless something is deliberately built to give it that awareness. If a new feature adds an element that `core/ui.js` renders into, remember to also place that element (by hand, in markup) inside the correct tab wrapper in `platform-web/index.html` — there's no automatic routing. `platform-electron/shell.html` doesn't need this at all, since it has no tabs (see section 4J).
 7. **Don't assume app-wide RTL/bilingual support exists.** Only `generateInvoiceHTML()`'s output (the generated invoice document) has EN/AR + RTL — see section 4F. Neither shell's own UI has a language toggle. If asked to add one, treat it as new scope to be designed, not something already there to "fix."
-8. **Storage is `localStorage` only, on both platforms, with no sync between them.** Supabase-backed sync has been discussed but is not implemented anywhere (see section 4J) — don't build features, docs, or explanations that assume `platform-electron/` and `platform-web/` share data, or that assume any backend/network layer exists today.
+8. **Storage is `localStorage` first on both platforms; Supabase sync is optional and opt-in.** A signed-out user's data never leaves the device, exactly as before this feature — don't build features, docs, or explanations that assume `platform-electron/` and `platform-web/` share data unconditionally. Only a **signed-in** user gets cross-platform sync, and even then it's eventually-consistent (queued + periodic), not real-time. See section 4K.
+9. **Every new project/shift/expense/invoice mutation site must call `stampAndSync()`** (section 4K) — same spirit as Rule 4's `SCHEMA_VERSION` bump, but for sync instead of local persistence. Skipping it has a forgiving failure mode: the record just never appears in the sync queue, which is obvious and easy to catch while testing (open devtools, check IndexedDB). If the new field also needs to reach Supabase, add the matching column to the applied schema **and** the relevant `upsert_<table>` RPC — skipping *that* fails loudly instead (the RPC call errors immediately) rather than silently, so it's the lower-risk gap of the two if something has to be missed. Deletions are a `pendingDeletions` bookkeeping entry *and* a `stampAndSync()` call on the record with `deletedAt` set (still just one call — `stampAndSync()` already does the enqueueing) — see any of `deleteLog()`/`deleteExpense()`/`deleteInvoice()` for the pattern. The `pendingDeletions` entry must include a full `record: { ...record }` snapshot (taken *after* `stampAndSync()`, so `syncId`/`updatedAt`/`deletedAt` are all already set), not just `{ table, id, deletedAt }` — `reconcileLocalWithServer()` (section 4K) needs that snapshot to rebuild the push if the queued op is lost (e.g. a sign-out) before it ever reaches Supabase, and by then the record itself is already gone from its array.

@@ -75,6 +75,7 @@
           notes: document.getElementById("notesInput").value.trim(),
           projectId: activeProjectId,
         };
+        stampAndSync("logs", currentShift);
         saveShift();
         renderUI();
       }
@@ -82,6 +83,7 @@
       function startBreak() {
         if (!currentShift || currentShift.breakStart) return;
         currentShift.breakStart = Date.now();
+        stampAndSync("logs", currentShift);
         saveShift();
         renderUI();
       }
@@ -92,6 +94,7 @@
         currentShift.totalBreakMs =
           (Number(currentShift.totalBreakMs) || 0) + breakDuration;
         currentShift.breakStart = null;
+        stampAndSync("logs", currentShift);
         saveShift();
         renderUI();
       }
@@ -142,6 +145,7 @@
         currentShift.totalBreakMs = minutes * 60 * 1000;
         currentShift.breakStart = null; // Correcting the total implies the break is now over
 
+        stampAndSync("logs", currentShift);
         saveShift();
         renderUI();
         closeEditBreakModal();
@@ -166,6 +170,12 @@
 
         const newLog = {
           id: Date.now(),
+          // Carries the same syncId currentShift already had (assigned by
+          // stampAndSync() at clockIn) so the eventual push updates the
+          // server's shifts row status active -> completed in place,
+          // instead of stampAndSync minting a fresh syncId here and
+          // leaving a duplicate "active" row stuck server-side forever.
+          syncId: currentShift.syncId,
           projectId: currentShift.projectId || activeProjectId,
           date: new Date(startTime).toLocaleDateString(),
           startTimeISO: new Date(startTime).toISOString(),
@@ -178,6 +188,7 @@
             currentShift.notes ||
             "Normal Shift",
         };
+        stampAndSync("logs", newLog);
 
         logs.unshift(newLog);
         currentShift = null;
@@ -221,6 +232,18 @@
             return group[0];
           }
 
+          // Sync identity for the merged result: keep the oldest session's
+          // id/syncId (smallest numeric id) rather than group[0] — logs
+          // gets unshift()ed on every clockOut/manual entry, so group[0]
+          // here is whichever session was added most recently, not
+          // necessarily the one already reflected server-side. Note: if
+          // more than one session in this group had ALREADY independently
+          // synced before this merge (rare — requires two clock-outs on
+          // the same project+day with a sync cycle running between them),
+          // the other session(s)' server rows are left orphaned rather
+          // than cleaned up — a known gap, not attempted here.
+          const canonical = group.reduce((a, b) => (a.id < b.id ? a : b));
+
           const projectId = group[0].projectId;
           const fallbackRate = getProjectRate(projectId) || hourlyRate || 0;
 
@@ -262,8 +285,9 @@
 
           const sampleStart = new Date(minStartMs);
 
-          return {
-            id: group[0].id,
+          const merged = {
+            id: canonical.id,
+            syncId: canonical.syncId,
             projectId: projectId,
             date: sampleStart.toLocaleDateString(),
             startTimeISO: new Date(minStartMs).toISOString(),
@@ -277,6 +301,11 @@
                 : `${group.length} shifts merged`,
             sessionCount: group.length,
           };
+          // The merge itself changes what this record represents (totals,
+          // session count), so it needs its own sync push — reuses
+          // canonical's syncId if it had one, mints one if not.
+          stampAndSync("logs", merged);
+          return merged;
         });
 
         logs = consolidated;
