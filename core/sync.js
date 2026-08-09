@@ -30,8 +30,9 @@
 // TODO: fill in with the real project values before sync can work at all.
 // Safe to hardcode (not secret) — Supabase RLS is what actually protects
 // the data, same as every anon-key Supabase client.
-const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+const SUPABASE_URL = "https://rawnbsszzdnoeeuzekce.supabase.co";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhd25ic3N6emRub2VldXpla2NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwOTI3MzIsImV4cCI6MjEwMTY2ODczMn0.cbC5LHzuSZraVBjO52hT-Yw0y9LZS40cktVkFcz5Dgk";
 
 let _supabaseClient = null;
 let _supabaseConfigWarned = false;
@@ -168,7 +169,9 @@ function shiftToParams(record) {
 function applyShiftRow(row) {
   const rowUpdated = getMsTimestamp(row.updated_at);
   const localProjectId = resolveLocalProjectId(row.project_id);
-  const matchesCurrentShift = !!(currentShift && currentShift.syncId === row.id);
+  const matchesCurrentShift = !!(
+    currentShift && currentShift.syncId === row.id
+  );
   const logIdx = logs.findIndex((l) => l.syncId === row.id);
 
   if (row.deleted_at) {
@@ -182,7 +185,8 @@ function applyShiftRow(row) {
     : logIdx !== -1
       ? logs[logIdx].updatedAt || 0
       : 0;
-  if ((matchesCurrentShift || logIdx !== -1) && rowUpdated <= localUpdated) return;
+  if ((matchesCurrentShift || logIdx !== -1) && rowUpdated <= localUpdated)
+    return;
 
   if (row.status === "active") {
     // A DIFFERENT local currentShift already exists (two devices both
@@ -311,7 +315,10 @@ function applyInvoiceRow(row) {
   const meta = payload.meta || {};
   const items = Array.isArray(payload.items) ? payload.items : [];
   const discount = Number(row.discount) || 0;
-  const itemsTotal = items.reduce((sum, li) => sum + (Number(li.amount) || 0), 0);
+  const itemsTotal = items.reduce(
+    (sum, li) => sum + (Number(li.amount) || 0),
+    0,
+  );
 
   const merged = {
     id: idx !== -1 ? invoices[idx].id : nextLocalNumericId(),
@@ -337,10 +344,26 @@ function applyInvoiceRow(row) {
 }
 
 const TABLE_SYNC_CONFIG = {
-  projects: { rpcName: "upsert_project", toParams: projectToParams, applyRow: applyProjectRow },
-  shifts: { rpcName: "upsert_shift", toParams: shiftToParams, applyRow: applyShiftRow },
-  expenses: { rpcName: "upsert_expense", toParams: expenseToParams, applyRow: applyExpenseRow },
-  invoices: { rpcName: "upsert_invoice", toParams: invoiceToParams, applyRow: applyInvoiceRow },
+  projects: {
+    rpcName: "upsert_project",
+    toParams: projectToParams,
+    applyRow: applyProjectRow,
+  },
+  shifts: {
+    rpcName: "upsert_shift",
+    toParams: shiftToParams,
+    applyRow: applyShiftRow,
+  },
+  expenses: {
+    rpcName: "upsert_expense",
+    toParams: expenseToParams,
+    applyRow: applyExpenseRow,
+  },
+  invoices: {
+    rpcName: "upsert_invoice",
+    toParams: invoiceToParams,
+    applyRow: applyInvoiceRow,
+  },
 };
 
 // ---------------------------------------------------------------------
@@ -432,7 +455,10 @@ async function pushOneOp(client, op) {
         .select("*")
         .maybeSingle();
       if (fetchErr) throw fetchErr;
-      if (row && getMsTimestamp(row.updated_at) > (userSettingsUpdatedAt || 0)) {
+      if (
+        row &&
+        getMsTimestamp(row.updated_at) > (userSettingsUpdatedAt || 0)
+      ) {
         businessName = row.business_name || "";
         signatureImage = row.signature_image || null;
         userSettingsUpdatedAt = getMsTimestamp(row.updated_at);
@@ -516,7 +542,8 @@ async function pushPendingOps() {
     try {
       await pushOneOp(client, op);
       await removePendingOp(op.opId);
-      if (op.record.deletedAt) markPendingDeletionSynced(op.table, op.record.id);
+      if (op.record.deletedAt)
+        markPendingDeletionSynced(op.table, op.record.id);
       anyApplied = true;
     } catch (err) {
       console.error(
@@ -538,7 +565,10 @@ async function pushPendingOps() {
 // ---------------------------------------------------------------------
 
 async function pullUserSettingsRow(client) {
-  const { data, error } = await client.from("user_settings").select("*").maybeSingle();
+  const { data, error } = await client
+    .from("user_settings")
+    .select("*")
+    .maybeSingle();
   if (error) throw error;
   if (!data) return;
   const rowUpdated = getMsTimestamp(data.updated_at);

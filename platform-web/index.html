@@ -1534,6 +1534,15 @@
       window.platformAdapter = {
         exportPDF: (html, suggestedFileName) =>
           webPrintExport(html, suggestedFileName),
+        // Where Supabase should redirect after a magic-link click — the
+        // live origin at runtime (not a hardcoded string), so this also
+        // works unchanged against a Vercel preview deployment or local
+        // `vercel dev`, not just the one production domain. Must also be
+        // listed under Supabase Dashboard -> Authentication -> URL
+        // Configuration -> Redirect URLs (e.g. https://<domain>/**) or
+        // Supabase ignores it and falls back to its localhost:3000
+        // placeholder — see CLAUDE.md section 4L.
+        getAuthRedirectUrl: () => window.location.origin,
       };
 
       // PWA installability + basic repeat-visit caching. No offline data

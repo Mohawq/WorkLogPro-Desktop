@@ -10,7 +10,26 @@
 async function signInWithMagicLink(email) {
   const client = initSupabaseClient();
   if (!client) throw new Error("Supabase isn't configured yet.");
-  const { error } = await client.auth.signInWithOtp({ email });
+  // Where Supabase should redirect the browser (web) / hand off a custom-
+  // protocol URL (Electron) after the user clicks the email link. Must
+  // come from the shell, not be hardcoded here — core/ has no idea whether
+  // it's running as a Vercel-hosted page or inside Electron, and the two
+  // need genuinely different values (a real origin vs. a custom protocol
+  // string). See window.platformAdapter.getAuthRedirectUrl() in each
+  // shell, and CLAUDE.md section 4L. Without Supabase Dashboard ->
+  // Authentication -> URL Configuration listing this value under Redirect
+  // URLs, Supabase silently falls back to its localhost:3000 placeholder
+  // instead of using it — that's a manual dashboard step, not something
+  // this code can detect or fix.
+  const redirectUrl =
+    window.platformAdapter &&
+    typeof window.platformAdapter.getAuthRedirectUrl === "function"
+      ? window.platformAdapter.getAuthRedirectUrl()
+      : undefined;
+  const { error } = await client.auth.signInWithOtp({
+    email,
+    options: redirectUrl ? { emailRedirectTo: redirectUrl } : undefined,
+  });
   if (error) throw error;
 }
 
@@ -99,6 +118,57 @@ async function initAuthUI() {
     }
     runSyncCycle();
   });
+
+  // Electron only — window.authAPI doesn't exist on the web shell at all
+  // (see platform-electron/preload.js). The web shell needs no equivalent
+  // wiring: a browser's magic-link redirect is an ordinary page
+  // navigation, and supabase-js's own detectSessionInUrl (on by default)
+  // already picks the tokens out of window.location.hash on load. Electron
+  // has no such navigation — the OS hands the app a
+  // worklogpro://auth#access_token=... URL out-of-band (see
+  // platform-electron/main.js), so completing the session has to happen
+  // manually — see handleElectronAuthCallback().
+  if (window.authAPI && typeof window.authAPI.onAuthCallback === "function") {
+    window.authAPI.onAuthCallback(handleElectronAuthCallback);
+  }
+}
+
+// Parses the fragment of a worklogpro://auth#access_token=...&
+// refresh_token=... URL (or an error variant — Supabase encodes a failed
+// expired link as #error=...&error_description=... in the same spot) and
+// completes the session via setSession() with the token pair straight
+// from the URL. onAuthStateChange()'s SIGNED_IN handler above picks up
+// from there — same reconcile-then-sync path the web magic-link flow
+// already uses, so this only needs to get a valid session established,
+// nothing else.
+async function handleElectronAuthCallback(url) {
+  const client = initSupabaseClient();
+  if (!client) return;
+
+  const statusEl = document.getElementById("authStatusMessage");
+  try {
+    const parsed = new URL(url);
+    const params = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+
+    const errorDescription =
+      params.get("error_description") || params.get("error");
+    if (errorDescription) throw new Error(errorDescription);
+
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    if (!access_token || !refresh_token) {
+      throw new Error("Sign-in link is missing its access/refresh token.");
+    }
+
+    const { error } = await client.auth.setSession({
+      access_token,
+      refresh_token,
+    });
+    if (error) throw error;
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `Sign-in failed: ${err.message}`;
+    console.error("WorkLog Pro: Electron auth callback failed:", err);
+  }
 }
 
 function renderAuthSettings() {
