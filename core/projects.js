@@ -39,8 +39,38 @@
       // migration if needed). Runs before renderUI() paints the dashboard.
       function initProjectFlow() {
         if (projects.length === 0) {
-          // Nothing to pick — force the "Add New Project" flow, no way to
-          // close back to a dashboard that has no project to show yet.
+          // projects.length === 0 SHOULD mean "genuinely fresh install,"
+          // but it can also mean loadStoredData() didn't finish reading
+          // projects[] before something downstream threw (see
+          // core/storage.js's loadStoredData() and CLAUDE.md section 4H —
+          // this happened in production). logs/expenses/invoices already
+          // having data is a cheap, always-available signal that this
+          // ISN'T a fresh install even when projects[] looks empty.
+          // Force-creating a project in that case is actively harmful: the
+          // user has no way to tell anything's wrong, so they just retype
+          // their existing project's name, which creates a DUPLICATE under
+          // a new id and orphans every log/expense/invoice still tagged
+          // with the old, no-longer-listed id. So: only force the
+          // no-escape flow for an actually-empty install; otherwise show
+          // the picker closable, with a warning, so the user can back out
+          // and investigate instead of being walked into that.
+          const hasExistingHistory =
+            logs.length > 0 || expenses.length > 0 || invoices.length > 0;
+
+          if (hasExistingHistory) {
+            console.error(
+              `WorkLog Pro: projects[] is empty but logs (${logs.length})/expenses (${expenses.length})/invoices (${invoices.length}) are not — this indicates a load problem, not a fresh install. See CLAUDE.md section 4H.`,
+            );
+            openProjectPicker(
+              true,
+              "Existing shift/expense/invoice records were found, but no matching project. Adding a new project below will NOT reconnect them — this usually means something went wrong loading your existing project, not that this is a first-time setup. Close this and check your data (e.g. Backup Data) before continuing.",
+            );
+            return;
+          }
+
+          // Nothing to pick, and no existing history either — force the
+          // "Add New Project" flow, no way to close back to a dashboard
+          // that has no project to show yet.
           openProjectPicker(false);
           return;
         }
@@ -60,15 +90,49 @@
         openProjectPicker(!!activeProjectId);
       }
 
+      // Injects the orphaned-data warning banner into the project picker on
+      // first use, same "build markup from core/ so no per-shell HTML edit
+      // is needed" convention core/invoicing.js's
+      // ensureProductInvoiceCreateUI() already established. Starts hidden;
+      // openProjectPicker() toggles it per call.
+      function ensureOrphanDataWarning() {
+        if (document.getElementById("orphanDataWarning")) return;
+        const anchor = document.getElementById("projectPickerList");
+        if (!anchor) return;
+        anchor.insertAdjacentHTML(
+          "beforebegin",
+          `<div id="orphanDataWarning" class="hidden mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+            <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+            <span id="orphanDataWarningText"></span>
+          </div>`,
+        );
+      }
+
       // allowClose: whether a close button is offered (there's nothing to
-      // go back to on a forced first-run pick, or when zero projects exist).
-      function openProjectPicker(allowClose) {
+      // go back to on a forced first-run pick, or when zero projects exist
+      // with no orphaned-history warning). warningMessage: optional — shown
+      // above the project list when initProjectFlow() detects projects[]
+      // is empty despite existing logs/expenses/invoices (see CLAUDE.md
+      // section 4H); omitted/undefined hides it, matching every other call
+      // site (requestSwitchProject(), the normal 2+/0-with-no-history
+      // paths) unchanged.
+      function openProjectPicker(allowClose, warningMessage) {
         renderProjectPickerList();
         document
           .getElementById("projectPickerCloseBtn")
           .classList.toggle("hidden", !allowClose);
         document.getElementById("newProjectName").value = "";
         document.getElementById("newProjectRate").value = "";
+
+        ensureOrphanDataWarning();
+        const warningEl = document.getElementById("orphanDataWarning");
+        if (warningEl) {
+          warningEl.classList.toggle("hidden", !warningMessage);
+          if (warningMessage) {
+            document.getElementById("orphanDataWarningText").textContent =
+              warningMessage;
+          }
+        }
 
         const screen = document.getElementById("projectPickerScreen");
         screen.classList.remove("hidden");

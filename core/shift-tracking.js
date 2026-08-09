@@ -256,8 +256,19 @@
           group.forEach((item) => {
             const s = new Date(item.startTimeISO).getTime();
             const e = new Date(item.endTimeISO).getTime();
-            if (s < minStartMs) minStartMs = s;
-            if (e > maxEndMs) maxEndMs = e;
+            // Number.isFinite() guards, not a bare comparison — NaN < x and
+            // NaN > x are both always false, so a malformed startTimeISO/
+            // endTimeISO (e.g. from an old importData() restore, which
+            // skips normalizeLogs() entirely) would otherwise silently
+            // leave minStartMs/maxEndMs stuck at their Infinity/-Infinity
+            // sentinels if EVERY item in the group has an invalid date.
+            // new Date(Infinity).toISOString() below then throws a
+            // RangeError, which — when this runs during loadStoredData()
+            // — aborts that whole synchronous load past this point,
+            // including projects[] not having been read yet on an older
+            // build that read it later. See CLAUDE.md section 4H.
+            if (Number.isFinite(s) && s < minStartMs) minStartMs = s;
+            if (Number.isFinite(e) && e > maxEndMs) maxEndMs = e;
 
             const net = Number(item.netDurationMs) || 0;
             totalNetMs += net;
@@ -273,6 +284,15 @@
               notesArr.push(item.notes.trim());
             }
           });
+
+          if (!Number.isFinite(minStartMs) || !Number.isFinite(maxEndMs)) {
+            console.error(
+              `WorkLog Pro: consolidateDailyLogs() found a same-day group (key "${groupKey}") where every session has an invalid start/end time — falling back to "now" for the merged entry instead of throwing.`,
+            );
+            const now = Date.now();
+            if (!Number.isFinite(minStartMs)) minStartMs = now;
+            if (!Number.isFinite(maxEndMs)) maxEndMs = now;
+          }
 
           const spanMs = Math.max(0, maxEndMs - minStartMs);
           const breakMs = Math.max(0, spanMs - totalNetMs);

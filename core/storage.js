@@ -185,6 +185,30 @@
             const storedVersion = Number(parsed.schemaVersion) || 1;
 
             hourlyRate = parseFloat(parsed.hourlyRate) || 20.0;
+
+            // projects[]/activeProjectId are read as early as possible —
+            // deliberately BEFORE logs/expenses/consolidateDailyLogs()
+            // below, which can throw (see consolidateDailyLogs()'s own
+            // hardening comment) on malformed date data. This whole
+            // function is one try/catch with a silent console.error and no
+            // recovery (see the bottom of this function) — if anything
+            // downstream of this point throws, execution stops right
+            // there. initProjectFlow() runs immediately afterward with no
+            // success/failure signal in between, so if projects[] hadn't
+            // been read yet at that point, it would still be sitting at
+            // the empty [] state.js declares it with — indistinguishable
+            // from a genuine fresh install, even though logs/expenses/
+            // invoices might already be fully loaded. That's exactly what
+            // caused a duplicate project + orphaned history in production
+            // (see CLAUDE.md section 4H) — reading projects here first is
+            // the fix, and initProjectFlow() has its own defense-in-depth
+            // check as a second layer.
+            projects = Array.isArray(parsed.projects) ? parsed.projects : [];
+            activeProjectId =
+              typeof parsed.activeProjectId === "string"
+                ? parsed.activeProjectId
+                : null;
+
             currentShift = normalizeShift(parsed.currentShift);
             logs = normalizeLogs(parsed.logs);
             expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
@@ -210,16 +234,12 @@
                 ? parsed.signatureImage
                 : null;
 
-            // v2 -> v3: added multi-project support. Reaching this branch
-            // at all means a wt_state envelope already existed, so this is
-            // unconditionally an "existing user" — even one with zero
-            // history yet still gets a (possibly empty) default project.
-            projects = Array.isArray(parsed.projects) ? parsed.projects : [];
-            activeProjectId =
-              typeof parsed.activeProjectId === "string"
-                ? parsed.activeProjectId
-                : null;
-
+            // v2 -> v3: added multi-project support (migration only —
+            // projects[]/activeProjectId themselves are already read
+            // above). Reaching this branch at all means a wt_state
+            // envelope already existed, so this is unconditionally an
+            // "existing user" — even one with zero history yet still gets
+            // a (possibly empty) default project.
             if (storedVersion < 3) {
               migrateToProjectModel();
             }
