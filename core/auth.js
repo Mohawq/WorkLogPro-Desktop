@@ -33,6 +33,50 @@ async function signInWithMagicLink(email) {
   if (error) throw error;
 }
 
+// Alternative to signInWithMagicLink() for contexts where completing a
+// magic link is unreliable — specifically an iOS PWA installed to the
+// home screen, which gets its own storage context fully isolated from
+// regular Safari tabs. Any magic-link click bounces out to Safari at some
+// point, so the resulting session lands in Safari's storage, not the
+// installed app's, and the app never sees it. Password auth completes
+// entirely in-process with no redirect, so it works there. See CLAUDE.md
+// section 4L's "Password sign-in" subsection.
+async function signUpWithPassword(email, password) {
+  const client = initSupabaseClient();
+  if (!client) throw new Error("Supabase isn't configured yet.");
+  const { data, error } = await client.auth.signUp({ email, password });
+  if (error) throw error;
+
+  // Supabase's anti-enumeration behavior: signing up again with an email
+  // that already has a CONFIRMED account returns success with no error at
+  // all (deliberately, so a signup form can't be used to probe which
+  // emails are registered) — but with an empty identities array instead
+  // of a new identity. This is the only way to tell "already registered"
+  // apart from a genuine new signup needing confirmation.
+  if (
+    data.user &&
+    Array.isArray(data.user.identities) &&
+    data.user.identities.length === 0
+  ) {
+    throw new Error("An account with this email already exists.");
+  }
+
+  // Whether a session comes back immediately depends on the Supabase
+  // dashboard's "Confirm email" setting, not anything this code controls
+  // — self-adapts to either: no session means confirmation is required
+  // before this account can sign in; a session means it's already
+  // active, and onAuthStateChange's SIGNED_IN handler (see initAuthUI())
+  // takes over exactly like any other sign-in.
+  return { needsConfirmation: !data.session, user: data.user };
+}
+
+async function signInWithPassword(email, password) {
+  const client = initSupabaseClient();
+  if (!client) throw new Error("Supabase isn't configured yet.");
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
 async function getSession() {
   const client = initSupabaseClient();
   if (!client) return null;
@@ -254,6 +298,145 @@ async function handleSendMagicLink(event) {
   }
 }
 
+// Maps a handful of common Supabase auth error messages to friendlier
+// text — deliberately not an exhaustive error-code table (see the task
+// this was built for), just the cases a user actually hits often enough
+// to be worth a clearer message. Anything else falls through to
+// Supabase's own error.message as-is.
+function friendlyAuthError(err) {
+  const message = (err && err.message) || "Something went wrong.";
+  const lower = message.toLowerCase();
+  if (lower.includes("invalid login credentials")) {
+    return "Incorrect email or password.";
+  }
+  if (lower.includes("email not confirmed")) {
+    return "Please confirm your email first — check your inbox for the confirmation link.";
+  }
+  if (lower.includes("already registered") || lower.includes("already exists")) {
+    return "An account with this email already exists — try signing in instead.";
+  }
+  return message;
+}
+
+// Toggles between the two sign-in methods in the Cloud Sync settings
+// block — magic link (existing) and password (this task). Both forms
+// stay in the DOM; this just shows one and hides the other, same
+// two-button-toggle pattern core/invoicing.js's
+// applyProductModeButtonStyles() already uses elsewhere in this app.
+function setAuthMode(mode) {
+  const magicForm = document.getElementById("authMagicLinkForm");
+  const passwordForm = document.getElementById("authPasswordForm");
+  const magicBtn = document.getElementById("authModeMagicLinkBtn");
+  const passwordBtn = document.getElementById("authModePasswordBtn");
+  const statusEl = document.getElementById("authStatusMessage");
+  if (!magicForm || !passwordForm || !magicBtn || !passwordBtn) return;
+
+  const isMagicLink = mode !== "password";
+  magicForm.classList.toggle("hidden", !isMagicLink);
+  passwordForm.classList.toggle("hidden", isMagicLink);
+
+  magicBtn.classList.toggle("bg-indigo-600", isMagicLink);
+  magicBtn.classList.toggle("text-white", isMagicLink);
+  magicBtn.classList.toggle("bg-slate-100", !isMagicLink);
+  magicBtn.classList.toggle("text-slate-600", !isMagicLink);
+
+  passwordBtn.classList.toggle("bg-indigo-600", !isMagicLink);
+  passwordBtn.classList.toggle("text-white", !isMagicLink);
+  passwordBtn.classList.toggle("bg-slate-100", isMagicLink);
+  passwordBtn.classList.toggle("text-slate-600", isMagicLink);
+
+  if (statusEl) statusEl.textContent = "";
+}
+
+// Sub-toggle inside the password form itself: signing in vs. creating a
+// new account. authPasswordFormMode is a hidden input (same "small hidden
+// input tracks a mode string" pattern invoicing.js's
+// invProductAmountMode already uses) rather than a second JS variable, so
+// handlePasswordAuthSubmit() below can read it without any extra state
+// to keep in sync.
+function setPasswordFormSignUpMode(isSignUp) {
+  const modeInput = document.getElementById("authPasswordFormMode");
+  const submitBtn = document.getElementById("authPasswordSubmitBtn");
+  const toggleLink = document.getElementById("authSignUpToggle");
+  const statusEl = document.getElementById("authStatusMessage");
+  if (!modeInput) return;
+
+  modeInput.value = isSignUp ? "signup" : "signin";
+  if (submitBtn) submitBtn.textContent = isSignUp ? "Create Account" : "Sign In";
+  if (toggleLink) {
+    toggleLink.textContent = isSignUp
+      ? "Already have an account? Sign in"
+      : "New here? Create an account";
+  }
+  if (statusEl) statusEl.textContent = "";
+}
+
+function togglePasswordSignUpMode() {
+  const modeInput = document.getElementById("authPasswordFormMode");
+  setPasswordFormSignUpMode(!(modeInput && modeInput.value === "signup"));
+}
+
+// Nice-to-have, not required — a plain password field would have been
+// fine, but this is cheap on a mobile-first form.
+function togglePasswordVisibility() {
+  const input = document.getElementById("authPasswordInput");
+  const icon = document.getElementById("authPasswordToggleIcon");
+  if (!input) return;
+  const nowShowing = input.type === "password";
+  input.type = nowShowing ? "text" : "password";
+  if (icon) {
+    icon.classList.toggle("fa-eye", !nowShowing);
+    icon.classList.toggle("fa-eye-slash", nowShowing);
+  }
+}
+
+async function handlePasswordAuthSubmit(event) {
+  event.preventDefault();
+  const emailInput = document.getElementById("authPasswordEmailInput");
+  const passwordInput = document.getElementById("authPasswordInput");
+  const modeInput = document.getElementById("authPasswordFormMode");
+  const statusEl = document.getElementById("authStatusMessage");
+  const btn = document.getElementById("authPasswordSubmitBtn");
+
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password) return;
+
+  const isSignUp = modeInput && modeInput.value === "signup";
+
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.textContent = "";
+  try {
+    if (isSignUp) {
+      const result = await signUpWithPassword(email, password);
+      // A confirmed-immediately signup already transitions to the
+      // signed-in view via onAuthStateChange; one still needing
+      // confirmation stays here so the message set below is visible —
+      // flip back to sign-in mode so a repeat visit doesn't look like
+      // another signup attempt. Done BEFORE setting the message, not
+      // after — setPasswordFormSignUpMode() clears authStatusMessage
+      // itself (see its own definition), so calling it afterward would
+      // immediately wipe whatever this just set.
+      if (result.needsConfirmation) setPasswordFormSignUpMode(false);
+      if (statusEl) {
+        statusEl.textContent = result.needsConfirmation
+          ? "Check your email to confirm your account, then sign in."
+          : "Account created and signed in.";
+      }
+    } else {
+      // A successful sign-in transitions renderAuthSettings() to the
+      // signed-in view immediately (via onAuthStateChange), so there's no
+      // "success" message to show here — same as the existing magic-link
+      // handler below only messaging on its own async-wait state.
+      await signInWithPassword(email, password);
+    }
+  } catch (err) {
+    if (statusEl) statusEl.textContent = friendlyAuthError(err);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function handleSyncNowClick() {
   const btn = document.getElementById("authSyncNowBtn");
   const originalLabel = btn ? btn.innerHTML : "";
@@ -276,4 +459,9 @@ async function handleSignOutClick() {
   await signOut();
   _lastKnownSession = null;
   renderAuthSettings();
+  // Don't leave a typed plaintext password sitting in the DOM after
+  // signing out — the field is hidden again (authSignedOutSection), not
+  // destroyed, so its value would otherwise persist.
+  const passwordInput = document.getElementById("authPasswordInput");
+  if (passwordInput) passwordInput.value = "";
 }

@@ -275,7 +275,34 @@
                 </label>
 
                 <div id="authSignedOutSection" class="space-y-2">
+                  <!-- Sign-in method toggle. Password exists alongside
+                       magic link (not instead of it) because an installed
+                       home-screen PWA has a storage context isolated from
+                       Safari — completing a magic link always bounces
+                       through Safari, so the session never reaches the
+                       installed app. Password auth has no redirect, so it
+                       works there. See CLAUDE.md section 4L. -->
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      id="authModeMagicLinkBtn"
+                      onclick="setAuthMode('magiclink')"
+                      class="flex-1 min-h-[44px] py-1.5 text-xs font-semibold rounded-lg transition bg-indigo-600 text-white"
+                    >
+                      Magic Link
+                    </button>
+                    <button
+                      type="button"
+                      id="authModePasswordBtn"
+                      onclick="setAuthMode('password')"
+                      class="flex-1 min-h-[44px] py-1.5 text-xs font-semibold rounded-lg transition bg-slate-100 text-slate-600"
+                    >
+                      Password
+                    </button>
+                  </div>
+
                   <form
+                    id="authMagicLinkForm"
                     onsubmit="handleSendMagicLink(event)"
                     class="flex gap-2"
                   >
@@ -294,6 +321,57 @@
                       Send Magic Link
                     </button>
                   </form>
+
+                  <form
+                    id="authPasswordForm"
+                    onsubmit="handlePasswordAuthSubmit(event)"
+                    class="hidden space-y-2"
+                  >
+                    <input type="hidden" id="authPasswordFormMode" value="signin" />
+                    <input
+                      type="email"
+                      id="authPasswordEmailInput"
+                      required
+                      placeholder="you@example.com"
+                      class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <div class="relative">
+                      <input
+                        type="password"
+                        id="authPasswordInput"
+                        required
+                        minlength="6"
+                        placeholder="Password"
+                        class="w-full min-h-[44px] px-3 py-2.5 pr-11 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onclick="togglePasswordVisibility()"
+                        title="Show/hide password"
+                        class="absolute inset-y-0 right-0 w-11 flex items-center justify-center text-slate-400 hover:text-slate-600"
+                      >
+                        <i id="authPasswordToggleIcon" class="fa-solid fa-eye"></i>
+                      </button>
+                    </div>
+                    <div class="flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        id="authSignUpToggle"
+                        onclick="togglePasswordSignUpMode()"
+                        class="min-h-[44px] text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold text-left"
+                      >
+                        New here? Create an account
+                      </button>
+                      <button
+                        type="submit"
+                        id="authPasswordSubmitBtn"
+                        class="min-h-[44px] px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-semibold rounded-xl transition shrink-0"
+                      >
+                        Sign In
+                      </button>
+                    </div>
+                  </form>
+
                   <p id="authStatusMessage" class="text-[11px] text-slate-400"></p>
                 </div>
 
