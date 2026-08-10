@@ -6,6 +6,13 @@
       // State Variables
       const SCHEMA_VERSION = 5; // v5 adds invoice numberSource/exported + syncConflicts[] — see migrateV4ToV5()
       const STORAGE_KEY = "wt_state";
+      // Whether the user has made a first-run choice (sign in, or
+      // explicitly "Continue without an account") on the sign-in-or-skip
+      // screen shown before initProjectFlow() — see core/projects.js's
+      // showFirstRunScreen(). A standalone key, not a wt_state field: this
+      // is local UI state only, never syncs, never needs a schema
+      // migration, so it doesn't belong in the versioned envelope.
+      const ONBOARDING_DISMISSED_KEY = "wt_first_run_dismissed";
 
       let currentShift = null; // { startTime, breakStart, totalBreakMs, notes, projectId }
       let logs = [];

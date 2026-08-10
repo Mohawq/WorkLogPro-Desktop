@@ -5,10 +5,40 @@
 // natural top of the dependency stack (references functions from every
 // other core file). Not Electron-specific — safe to reuse from any shell.
 
+      // Gates initProjectFlow()'s picker behind a one-time sign-in-or-skip
+      // screen for a brand-new, never-decided user — see
+      // core/projects.js's showFirstRunScreen(). Three cases skip
+      // straight to the existing (unchanged) initProjectFlow() flow: the
+      // user already made this choice before (dismissed flag set),
+      // Supabase isn't configured at all (nothing to sign into, so asking
+      // would just be broken — see isSupabaseConfigured()), or a session
+      // already exists (a returning signed-in user; per this feature's
+      // own requirement, unchanged behavior, no new screen). Extracted
+      // into its own function, same as initProjectFlow()/initAuthUI(),
+      // rather than inlined in the DOMContentLoaded handler below.
+      async function runStartupGate() {
+        const alreadyDecided =
+          localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "true";
+        if (alreadyDecided || !isSupabaseConfigured()) {
+          initProjectFlow();
+          return;
+        }
+
+        const session = await getSession();
+        if (session) {
+          // Nothing to ask — record it so future launches skip this
+          // getSession() round-trip entirely, same outcome either way.
+          localStorage.setItem(ONBOARDING_DISMISSED_KEY, "true");
+          initProjectFlow();
+        } else {
+          showFirstRunScreen();
+        }
+      }
+
       // Load persisted state on startup
-      window.addEventListener("DOMContentLoaded", () => {
+      window.addEventListener("DOMContentLoaded", async () => {
         loadStoredData();
-        initProjectFlow();
+        await runStartupGate();
         initAuthUI(); // async — checks session, renders settings-sheet auth state, kicks off first sync cycle if already signed in
         updateClock();
         setInterval(updateClock, 1000);

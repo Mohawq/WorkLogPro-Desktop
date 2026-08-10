@@ -145,6 +145,101 @@
         screen.classList.remove("flex");
       }
 
+      // ---------------------------------------------------------------
+      // First-run sign-in-or-skip screen. Shown once, before
+      // initProjectFlow()'s picker logic ever runs, only when there is no
+      // active session AND the user hasn't already made a first-run
+      // choice on a previous launch (see core/ui.js's DOMContentLoaded
+      // bootstrap, which decides whether to call showFirstRunScreen() at
+      // all). Reuses the SAME #authPasswordForm Settings already has —
+      // rather than a second copy of that markup, this physically moves
+      // the one form node between two containers (#authFormBlock's normal
+      // home inside #authSignedOutSection, and #firstRunAuthFormSlot on
+      // this screen) via appendChild(), which relocates an already-
+      // attached DOM node rather than cloning it. Every id-based lookup
+      // elsewhere (handlePasswordAuthSubmit(), togglePasswordSignUpMode(),
+      // renderAuthSettings(), ...) keeps working unchanged regardless of
+      // which container currently holds it.
+      // ---------------------------------------------------------------
+
+      function showFirstRunScreen() {
+        const formBlock = document.getElementById("authFormBlock");
+        const slot = document.getElementById("firstRunAuthFormSlot");
+        const form = document.getElementById("authPasswordForm");
+        const screen = document.getElementById("firstRunScreen");
+        if (!formBlock || !slot || !form || !screen) return;
+
+        slot.appendChild(formBlock);
+        // Overrides the form's onsubmit (originally set by its
+        // onsubmit="handlePasswordAuthSubmit(event)" markup attribute)
+        // with a wrapper that does the same sign-in/sign-up work and then
+        // adds the first-run-specific "wait for the pull, then decide"
+        // step — without touching handlePasswordAuthSubmit() itself, so
+        // Settings' own use of the exact same function is unaffected.
+        form.onsubmit = (event) => handleFirstRunAuthSubmit(event);
+
+        screen.classList.remove("hidden");
+        screen.classList.add("flex");
+      }
+
+      // Moves the form back to its normal home in Settings, restores its
+      // original submit behavior, hides this screen, and records the
+      // choice so it isn't shown again. Called by both
+      // skipFirstRunAuth() and a successful handleFirstRunAuthSubmit().
+      function dismissFirstRunScreen() {
+        localStorage.setItem(ONBOARDING_DISMISSED_KEY, "true");
+
+        const formBlock = document.getElementById("authFormBlock");
+        const home = document.getElementById("authSignedOutSection");
+        const form = document.getElementById("authPasswordForm");
+        if (formBlock && home) home.appendChild(formBlock);
+        if (form) form.onsubmit = (event) => handlePasswordAuthSubmit(event);
+
+        const screen = document.getElementById("firstRunScreen");
+        if (screen) {
+          screen.classList.add("hidden");
+          screen.classList.remove("flex");
+        }
+      }
+
+      // "Continue without an account" — equally weighted with the sign-in
+      // form above it, never hidden or de-emphasized; the app stays fully
+      // usable offline with no account, per the existing local-first
+      // design (CLAUDE.md section 1). Proceeds to exactly the same
+      // initProjectFlow() the picker has always used.
+      function skipFirstRunAuth() {
+        dismissFirstRunScreen();
+        initProjectFlow();
+        renderUI();
+      }
+
+      // Wraps handlePasswordAuthSubmit() (unmodified — same sign-in/
+      // sign-up logic Settings uses) with the one thing that's genuinely
+      // new here: on success, wait for reconcileLocalWithServer()/
+      // runSyncCycle() to actually pull down any existing server-side
+      // projects BEFORE deciding whether initProjectFlow() has anything
+      // to auto-select — the normal Settings flow never needs to await
+      // this, since the user is already past the picker by the time they
+      // sign in there. initAuthUI()'s own onAuthStateChange listener also
+      // fires for this same sign-in and independently re-runs the same
+      // reconcile+sync in the background; running it twice is redundant
+      // but harmless (enqueueSyncOp() coalesces by record, and pull/push
+      // are both LWW-guarded — see CLAUDE.md section 4K), and far simpler
+      // than trying to coordinate the two.
+      async function handleFirstRunAuthSubmit(event) {
+        await handlePasswordAuthSubmit(event);
+
+        const session = await getSession();
+        if (!session) return; // sign-in failed, or a signup still needs email confirmation — stay on this screen showing handlePasswordAuthSubmit()'s own status message
+
+        await reconcileLocalWithServer();
+        await runSyncCycle();
+
+        dismissFirstRunScreen();
+        initProjectFlow();
+        renderUI();
+      }
+
       // Clicking "Switch Project" in the header routes through here rather
       // than calling openProjectPicker() directly, so the active-shift
       // guard holds even if the button's disabled state hasn't repainted
