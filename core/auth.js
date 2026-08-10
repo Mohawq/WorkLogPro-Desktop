@@ -7,40 +7,13 @@
 // window.platformAdapter — only genuinely platform-different capabilities
 // (PDF export, filesystem) go through that boundary.
 
-async function signInWithMagicLink(email) {
-  const client = initSupabaseClient();
-  if (!client) throw new Error("Supabase isn't configured yet.");
-  // Where Supabase should redirect the browser (web) / hand off a custom-
-  // protocol URL (Electron) after the user clicks the email link. Must
-  // come from the shell, not be hardcoded here — core/ has no idea whether
-  // it's running as a Vercel-hosted page or inside Electron, and the two
-  // need genuinely different values (a real origin vs. a custom protocol
-  // string). See window.platformAdapter.getAuthRedirectUrl() in each
-  // shell, and CLAUDE.md section 4L. Without Supabase Dashboard ->
-  // Authentication -> URL Configuration listing this value under Redirect
-  // URLs, Supabase silently falls back to its localhost:3000 placeholder
-  // instead of using it — that's a manual dashboard step, not something
-  // this code can detect or fix.
-  const redirectUrl =
-    window.platformAdapter &&
-    typeof window.platformAdapter.getAuthRedirectUrl === "function"
-      ? window.platformAdapter.getAuthRedirectUrl()
-      : undefined;
-  const { error } = await client.auth.signInWithOtp({
-    email,
-    options: redirectUrl ? { emailRedirectTo: redirectUrl } : undefined,
-  });
-  if (error) throw error;
-}
-
-// Alternative to signInWithMagicLink() for contexts where completing a
-// magic link is unreliable — specifically an iOS PWA installed to the
-// home screen, which gets its own storage context fully isolated from
-// regular Safari tabs. Any magic-link click bounces out to Safari at some
-// point, so the resulting session lands in Safari's storage, not the
-// installed app's, and the app never sees it. Password auth completes
-// entirely in-process with no redirect, so it works there. See CLAUDE.md
-// section 4L's "Password sign-in" subsection.
+// Password is the only sign-in method — magic link was removed (see
+// CLAUDE.md section 4L for why: an installed iOS home-screen PWA has a
+// storage context isolated from Safari, and completing a magic link
+// always bounces through Safari at some point, so the resulting session
+// never reached the installed app. Password auth completes entirely
+// in-process with no redirect, so it works everywhere magic link
+// couldn't, including there.
 async function signUpWithPassword(email, password) {
   const client = initSupabaseClient();
   if (!client) throw new Error("Supabase isn't configured yet.");
@@ -135,20 +108,14 @@ async function initAuthUI() {
   if (_lastKnownSession) {
     // An existing session restored at app launch — this is the actual
     // "signed out (queue cleared) -> reopen the app -> still signed in"
-    // scenario reconcileLocalWithServer() exists for. The magic-link
-    // SIGNED_IN event below only fires for a FRESH sign-in, never for a
-    // session that was already valid when the page loaded, so this call
-    // has to be here too, not just in the callback.
+    // scenario reconcileLocalWithServer() exists for. The SIGNED_IN event
+    // below only fires for a FRESH sign-in, never for a session that was
+    // already valid when the page loaded, so this call has to be here
+    // too, not just in the callback.
     await reconcileLocalWithServer();
     runSyncCycle();
   }
 
-  // Covers the magic-link redirect completing mid-session (the user
-  // wasn't signed in at page load) — runSyncCycle()'s own network
-  // listener/interval (registered unconditionally in sync.js) only need
-  // an active session to stop no-op'ing; this is what actually gets the
-  // FIRST cycle running right when sign-in completes, instead of waiting
-  // for the next 5-minute tick.
   onAuthStateChange(async (session, event) => {
     _lastKnownSession = session;
     renderAuthSettings();
@@ -162,57 +129,6 @@ async function initAuthUI() {
     }
     runSyncCycle();
   });
-
-  // Electron only — window.authAPI doesn't exist on the web shell at all
-  // (see platform-electron/preload.js). The web shell needs no equivalent
-  // wiring: a browser's magic-link redirect is an ordinary page
-  // navigation, and supabase-js's own detectSessionInUrl (on by default)
-  // already picks the tokens out of window.location.hash on load. Electron
-  // has no such navigation — the OS hands the app a
-  // worklogpro://auth#access_token=... URL out-of-band (see
-  // platform-electron/main.js), so completing the session has to happen
-  // manually — see handleElectronAuthCallback().
-  if (window.authAPI && typeof window.authAPI.onAuthCallback === "function") {
-    window.authAPI.onAuthCallback(handleElectronAuthCallback);
-  }
-}
-
-// Parses the fragment of a worklogpro://auth#access_token=...&
-// refresh_token=... URL (or an error variant — Supabase encodes a failed
-// expired link as #error=...&error_description=... in the same spot) and
-// completes the session via setSession() with the token pair straight
-// from the URL. onAuthStateChange()'s SIGNED_IN handler above picks up
-// from there — same reconcile-then-sync path the web magic-link flow
-// already uses, so this only needs to get a valid session established,
-// nothing else.
-async function handleElectronAuthCallback(url) {
-  const client = initSupabaseClient();
-  if (!client) return;
-
-  const statusEl = document.getElementById("authStatusMessage");
-  try {
-    const parsed = new URL(url);
-    const params = new URLSearchParams(parsed.hash.replace(/^#/, ""));
-
-    const errorDescription =
-      params.get("error_description") || params.get("error");
-    if (errorDescription) throw new Error(errorDescription);
-
-    const access_token = params.get("access_token");
-    const refresh_token = params.get("refresh_token");
-    if (!access_token || !refresh_token) {
-      throw new Error("Sign-in link is missing its access/refresh token.");
-    }
-
-    const { error } = await client.auth.setSession({
-      access_token,
-      refresh_token,
-    });
-    if (error) throw error;
-  } catch (err) {
-    if (statusEl) statusEl.textContent = `Sign-in failed: ${err.message}`;
-    console.error("WorkLog Pro: Electron auth callback failed:", err);
-  }
 }
 
 function renderAuthSettings() {
@@ -276,28 +192,6 @@ function renderLastSyncedText() {
     : "Not synced yet";
 }
 
-async function handleSendMagicLink(event) {
-  event.preventDefault();
-  const emailInput = document.getElementById("authEmailInput");
-  const statusEl = document.getElementById("authStatusMessage");
-  const btn = document.getElementById("authSendMagicLinkBtn");
-  const email = emailInput.value.trim();
-  if (!email) return;
-
-  if (btn) btn.disabled = true;
-  if (statusEl) statusEl.textContent = "";
-  try {
-    await signInWithMagicLink(email);
-    if (statusEl) {
-      statusEl.textContent = "Check your email for a sign-in link.";
-    }
-  } catch (err) {
-    if (statusEl) statusEl.textContent = `Error: ${err.message}`;
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
 // Maps a handful of common Supabase auth error messages to friendlier
 // text — deliberately not an exhaustive error-code table (see the task
 // this was built for), just the cases a user actually hits often enough
@@ -316,36 +210,6 @@ function friendlyAuthError(err) {
     return "An account with this email already exists — try signing in instead.";
   }
   return message;
-}
-
-// Toggles between the two sign-in methods in the Cloud Sync settings
-// block — magic link (existing) and password (this task). Both forms
-// stay in the DOM; this just shows one and hides the other, same
-// two-button-toggle pattern core/invoicing.js's
-// applyProductModeButtonStyles() already uses elsewhere in this app.
-function setAuthMode(mode) {
-  const magicForm = document.getElementById("authMagicLinkForm");
-  const passwordForm = document.getElementById("authPasswordForm");
-  const magicBtn = document.getElementById("authModeMagicLinkBtn");
-  const passwordBtn = document.getElementById("authModePasswordBtn");
-  const statusEl = document.getElementById("authStatusMessage");
-  if (!magicForm || !passwordForm || !magicBtn || !passwordBtn) return;
-
-  const isMagicLink = mode !== "password";
-  magicForm.classList.toggle("hidden", !isMagicLink);
-  passwordForm.classList.toggle("hidden", isMagicLink);
-
-  magicBtn.classList.toggle("bg-indigo-600", isMagicLink);
-  magicBtn.classList.toggle("text-white", isMagicLink);
-  magicBtn.classList.toggle("bg-slate-100", !isMagicLink);
-  magicBtn.classList.toggle("text-slate-600", !isMagicLink);
-
-  passwordBtn.classList.toggle("bg-indigo-600", !isMagicLink);
-  passwordBtn.classList.toggle("text-white", !isMagicLink);
-  passwordBtn.classList.toggle("bg-slate-100", isMagicLink);
-  passwordBtn.classList.toggle("text-slate-600", isMagicLink);
-
-  if (statusEl) statusEl.textContent = "";
 }
 
 // Sub-toggle inside the password form itself: signing in vs. creating a

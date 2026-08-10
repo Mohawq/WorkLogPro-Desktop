@@ -177,15 +177,152 @@
                 .reduce((sum, l) => sum + (Number(l.netDurationMs) || 0), 0) /
               (1000 * 60 * 60);
             return `
-              <button type="button" onclick="selectProject('${p.id}')" class="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl transition text-left">
-                <div>
-                  <div class="text-sm font-semibold text-slate-800">${escapeHtml(p.name)}</div>
-                  <div class="text-xs text-slate-400">${totalHours.toFixed(2)} hrs logged · $${(Number(p.hourlyRate) || 0).toFixed(2)}/hr</div>
-                </div>
-                <i class="fa-solid fa-chevron-right text-slate-300"></i>
-              </button>`;
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="selectProject('${p.id}')" class="flex-1 min-w-0 flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl transition text-left">
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-slate-800 truncate">${escapeHtml(p.name)}</div>
+                    <div class="text-xs text-slate-400">${totalHours.toFixed(2)} hrs logged · $${(Number(p.hourlyRate) || 0).toFixed(2)}/hr</div>
+                  </div>
+                  <i class="fa-solid fa-chevron-right text-slate-300 shrink-0"></i>
+                </button>
+                <button type="button" onclick="confirmDeleteProject('${p.id}')" title="Delete Project" class="shrink-0 w-9 h-9 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>`;
           })
           .join("");
+      }
+
+      // Confirmation gate for deleteProject() below — this is destructive
+      // and irreversible (every log/expense/invoice under the project goes
+      // with it), so the dialog names the project and the exact counts
+      // being removed rather than a generic "are you sure?".
+      function confirmDeleteProject(id) {
+        const project = projects.find((p) => p.id === id);
+        if (!project) return;
+
+        // Same guard requestSwitchProject() uses, but scoped to just this
+        // project — there's only ever one currentShift, tagged with one
+        // projectId, so an active shift on a DIFFERENT project doesn't
+        // block deleting this one.
+        if (currentShift && currentShift.projectId === id) {
+          alert(
+            "Clock out before deleting this project — it has a shift in progress.",
+          );
+          return;
+        }
+
+        const logCount = logs.filter((l) => l.projectId === id).length;
+        const expenseCount = expenses.filter(
+          (e) => e.projectId === id,
+        ).length;
+        const invoiceCount = invoices.filter(
+          (inv) => inv.projectId === id,
+        ).length;
+
+        const confirmed = confirm(
+          `Delete "${project.name}"?\n\nThis will permanently delete ${logCount} shift ${logCount === 1 ? "entry" : "entries"}, ${expenseCount} expense${expenseCount === 1 ? "" : "s"}, and ${invoiceCount} invoice${invoiceCount === 1 ? "" : "s"} tied to this project. This cannot be undone.`,
+        );
+        if (!confirmed) return;
+
+        deleteProject(id);
+      }
+
+      // Full delete only — there is no "keep the records, drop the
+      // project" option. Cascades through every flat array tagged with
+      // this projectId using the exact same per-record
+      // stampAndSync()+pendingDeletions pattern every other delete
+      // function in this app already uses (see deleteLog()/
+      // deleteExpense()/deleteInvoice()), just applied to every record
+      // under one project instead of one record at a time — the existing
+      // push/pull machinery in core/sync.js needs no changes to support
+      // this, since each record already carries stampAndSync's own
+      // table-name mapping and deletion (deleted_at set) is already
+      // handled generically per table there.
+      function deleteProject(id) {
+        const project = projects.find((p) => p.id === id);
+        if (!project) return;
+
+        const deletedAt = getMsTimestamp();
+
+        logs
+          .filter((l) => l.projectId === id)
+          .forEach((record) => {
+            record.deletedAt = deletedAt;
+            stampAndSync("logs", record);
+            pendingDeletions.push({
+              table: "logs",
+              id: record.id,
+              deletedAt,
+              synced: false,
+              record: { ...record },
+            });
+          });
+        logs = logs.filter((l) => l.projectId !== id);
+
+        expenses
+          .filter((e) => e.projectId === id)
+          .forEach((record) => {
+            record.deletedAt = deletedAt;
+            stampAndSync("expenses", record);
+            pendingDeletions.push({
+              table: "expenses",
+              id: record.id,
+              deletedAt,
+              synced: false,
+              record: { ...record },
+            });
+          });
+        expenses = expenses.filter((e) => e.projectId !== id);
+
+        invoices
+          .filter((inv) => inv.projectId === id)
+          .forEach((record) => {
+            record.deletedAt = deletedAt;
+            stampAndSync("invoices", record);
+            pendingDeletions.push({
+              table: "invoices",
+              id: record.id,
+              deletedAt,
+              synced: false,
+              record: { ...record },
+            });
+          });
+        invoices = invoices.filter((inv) => inv.projectId !== id);
+
+        project.deletedAt = deletedAt;
+        stampAndSync("projects", project);
+        pendingDeletions.push({
+          table: "projects",
+          id: project.id,
+          deletedAt,
+          synced: false,
+          record: { ...project },
+        });
+        projects = projects.filter((p) => p.id !== id);
+
+        if (activeProjectId === id) {
+          // Can't leave activeProjectId pointing at something that no
+          // longer exists. initProjectFlow() already knows how to
+          // auto-select the sole remaining project or force the picker if
+          // none remain — reuse that instead of duplicating its
+          // zero-or-one-project logic here. Close first: initProjectFlow()
+          // only OPENS the picker when it needs to (0 or 2+ projects); the
+          // exactly-1-project case just silently re-selects and leaves an
+          // already-open picker open, which would look wrong here since
+          // the picker is exactly where this delete was triggered from.
+          activeProjectId = null;
+          persistState();
+          closeProjectPicker();
+          initProjectFlow();
+        } else {
+          // Deleted project wasn't active — the picker (where this was
+          // triggered from) stays open, just refreshed to drop the row.
+          persistState();
+          renderProjectPickerList();
+        }
+
+        renderUI();
       }
 
       function selectProject(id) {

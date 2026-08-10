@@ -275,57 +275,18 @@
                 </label>
 
                 <div id="authSignedOutSection" class="space-y-2">
-                  <!-- Sign-in method toggle. Password exists alongside
-                       magic link (not instead of it) because an installed
-                       home-screen PWA has a storage context isolated from
-                       Safari — completing a magic link always bounces
-                       through Safari, so the session never reaches the
-                       installed app. Password auth has no redirect, so it
-                       works there. See CLAUDE.md section 4L. -->
-                  <div class="flex gap-2">
-                    <button
-                      type="button"
-                      id="authModeMagicLinkBtn"
-                      onclick="setAuthMode('magiclink')"
-                      class="flex-1 min-h-[44px] py-1.5 text-xs font-semibold rounded-lg transition bg-indigo-600 text-white"
-                    >
-                      Magic Link
-                    </button>
-                    <button
-                      type="button"
-                      id="authModePasswordBtn"
-                      onclick="setAuthMode('password')"
-                      class="flex-1 min-h-[44px] py-1.5 text-xs font-semibold rounded-lg transition bg-slate-100 text-slate-600"
-                    >
-                      Password
-                    </button>
-                  </div>
-
-                  <form
-                    id="authMagicLinkForm"
-                    onsubmit="handleSendMagicLink(event)"
-                    class="flex gap-2"
-                  >
-                    <input
-                      type="email"
-                      id="authEmailInput"
-                      required
-                      placeholder="you@example.com"
-                      class="flex-1 min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    <button
-                      type="submit"
-                      id="authSendMagicLinkBtn"
-                      class="min-h-[44px] px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-semibold rounded-xl transition shrink-0"
-                    >
-                      Send Magic Link
-                    </button>
-                  </form>
-
+                  <!-- Password is the only sign-in method — magic link was
+                       removed. It couldn't work for an installed
+                       home-screen PWA (isolated storage context from
+                       Safari; completing a magic link always bounces
+                       through Safari, so the session never reached the
+                       installed app), and password auth covers every case
+                       magic link did plus that one. See CLAUDE.md
+                       section 4L. -->
                   <form
                     id="authPasswordForm"
                     onsubmit="handlePasswordAuthSubmit(event)"
-                    class="hidden space-y-2"
+                    class="space-y-2"
                   >
                     <input type="hidden" id="authPasswordFormMode" value="signin" />
                     <input
@@ -1612,15 +1573,6 @@
       window.platformAdapter = {
         exportPDF: (html, suggestedFileName) =>
           webPrintExport(html, suggestedFileName),
-        // Where Supabase should redirect after a magic-link click — the
-        // live origin at runtime (not a hardcoded string), so this also
-        // works unchanged against a Vercel preview deployment or local
-        // `vercel dev`, not just the one production domain. Must also be
-        // listed under Supabase Dashboard -> Authentication -> URL
-        // Configuration -> Redirect URLs (e.g. https://<domain>/**) or
-        // Supabase ignores it and falls back to its localhost:3000
-        // placeholder — see CLAUDE.md section 4L.
-        getAuthRedirectUrl: () => window.location.origin,
       };
 
       // PWA installability + basic repeat-visit caching. No offline data
