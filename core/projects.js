@@ -220,20 +220,30 @@
       // projects BEFORE deciding whether initProjectFlow() has anything
       // to auto-select — the normal Settings flow never needs to await
       // this, since the user is already past the picker by the time they
-      // sign in there. initAuthUI()'s own onAuthStateChange listener also
+      // sign in there. Bounded by the same STARTUP_SYNC_TIMEOUT_MS /
+      // withTimeout() (core/sync.js) core/ui.js's runStartupGate() uses,
+      // and shows the same #startupSyncIndicator — one mechanism, reused
+      // here rather than a second one, so a slow/offline connection can't
+      // leave this screen looking frozen after the submit button
+      // re-enables. initAuthUI()'s own onAuthStateChange listener also
       // fires for this same sign-in and independently re-runs the same
-      // reconcile+sync in the background; running it twice is redundant
-      // but harmless (enqueueSyncOp() coalesces by record, and pull/push
-      // are both LWW-guarded — see CLAUDE.md section 4K), and far simpler
-      // than trying to coordinate the two.
+      // reconcile+sync in the background (unbounded, but that's fine —
+      // it's not blocking anything the user is looking at); running it
+      // twice is redundant but harmless (enqueueSyncOp() coalesces by
+      // record, and pull/push are both LWW-guarded — see CLAUDE.md
+      // section 4K), and far simpler than trying to coordinate the two.
       async function handleFirstRunAuthSubmit(event) {
         await handlePasswordAuthSubmit(event);
 
         const session = await getSession();
         if (!session) return; // sign-in failed, or a signup still needs email confirmation — stay on this screen showing handlePasswordAuthSubmit()'s own status message
 
-        await reconcileLocalWithServer();
-        await runSyncCycle();
+        showStartupSyncIndicator();
+        await withTimeout(async () => {
+          await reconcileLocalWithServer();
+          await runSyncCycle();
+        }, STARTUP_SYNC_TIMEOUT_MS);
+        hideStartupSyncIndicator();
 
         dismissFirstRunScreen();
         initProjectFlow();

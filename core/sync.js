@@ -702,6 +702,31 @@ async function runSyncCycle() {
   }
 }
 
+// How long the startup sync attempts below (core/ui.js's runStartupGate(),
+// core/projects.js's handleFirstRunAuthSubmit()) wait for a sync pull
+// before giving up and proceeding with local data — a few seconds' delay
+// is worth it for freshly-synced data, but must never turn into an
+// indefinite hang on a slow/offline connection. Not a spec'd value, just
+// a reasonable pick within the 3-5s range; easy constant to tune later.
+const STARTUP_SYNC_TIMEOUT_MS = 4000;
+
+// Races an arbitrary promise-returning callback against a short timeout —
+// used to bound the startup sync attempts so a slow/offline network can
+// never block app startup. If the timeout wins, the original work (here,
+// always some combination of reconcileLocalWithServer()/runSyncCycle(),
+// both of which already handle their own errors internally and never
+// throw) is simply left running in the background; the regular periodic
+// interval and 'online' event listener below still pick up anything it
+// didn't finish, completely unaffected by this. Callers should treat "did
+// it finish" as advisory, not authoritative — proceeding regardless is
+// the whole point.
+function withTimeout(promiseFactory, timeoutMs) {
+  return Promise.race([
+    promiseFactory(),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
 // Deliberately does NOT skip pullChanges() just because the local push
 // queue is empty — the periodic/online triggers exist specifically to
 // pick up changes pushed from OTHER devices, and an empty local queue

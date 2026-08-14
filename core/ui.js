@@ -5,34 +5,71 @@
 // natural top of the dependency stack (references functions from every
 // other core file). Not Electron-specific — safe to reuse from any shell.
 
-      // Gates initProjectFlow()'s picker behind a one-time sign-in-or-skip
-      // screen for a brand-new, never-decided user — see
-      // core/projects.js's showFirstRunScreen(). Three cases skip
-      // straight to the existing (unchanged) initProjectFlow() flow: the
-      // user already made this choice before (dismissed flag set),
-      // Supabase isn't configured at all (nothing to sign into, so asking
-      // would just be broken — see isSupabaseConfigured()), or a session
-      // already exists (a returning signed-in user; per this feature's
-      // own requirement, unchanged behavior, no new screen). Extracted
-      // into its own function, same as initProjectFlow()/initAuthUI(),
-      // rather than inlined in the DOMContentLoaded handler below.
+      function showStartupSyncIndicator() {
+        const el = document.getElementById("startupSyncIndicator");
+        if (!el) return;
+        el.classList.remove("hidden");
+        el.classList.add("flex");
+      }
+
+      function hideStartupSyncIndicator() {
+        const el = document.getElementById("startupSyncIndicator");
+        if (!el) return;
+        el.classList.add("hidden");
+        el.classList.remove("flex");
+      }
+
+      // Gates initProjectFlow()'s picker behind two things for a
+      // signed-in user: the (unchanged) first-run-screen decision for a
+      // brand-new never-decided user, and — new — a brief, timeout-bounded
+      // sync pull so a project/shift added on another device shows up
+      // before the picker/timer screen ever renders, instead of waiting
+      // for the next 5-minute periodic cycle or a manual "Sync Now".
+      // Extracted into its own function, same as
+      // initProjectFlow()/initAuthUI(), rather than inlined in the
+      // DOMContentLoaded handler below.
       async function runStartupGate() {
-        const alreadyDecided =
-          localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "true";
-        if (alreadyDecided || !isSupabaseConfigured()) {
+        if (!isSupabaseConfigured()) {
+          // Nothing to sign into — proceed immediately, exactly as
+          // before this feature existed.
           initProjectFlow();
           return;
         }
 
         const session = await getSession();
-        if (session) {
-          // Nothing to ask — record it so future launches skip this
-          // getSession() round-trip entirely, same outcome either way.
-          localStorage.setItem(ONBOARDING_DISMISSED_KEY, "true");
-          initProjectFlow();
-        } else {
-          showFirstRunScreen();
+
+        if (!session) {
+          // Signed-out path is completely unchanged: respect whatever
+          // first-run choice was already made, or show that screen if
+          // none has been yet. No sync attempt — there's no session to
+          // sync with.
+          const alreadyDecided =
+            localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "true";
+          if (alreadyDecided) {
+            initProjectFlow();
+          } else {
+            showFirstRunScreen();
+          }
+          return;
         }
+
+        // Signed in — nothing to ask (the first-run screen never applies
+        // to a returning signed-in user), but worth a bounded sync
+        // attempt first. runSyncCycle() pushes anything locally queued
+        // from a previous session, then pulls — bounded by
+        // STARTUP_SYNC_TIMEOUT_MS (core/sync.js) so a slow/offline
+        // connection can never delay startup beyond a few seconds; on
+        // timeout, initProjectFlow() still proceeds against whatever
+        // local data already exists, same as today's behavior, and the
+        // regular periodic/online-triggered sync (unaffected by any of
+        // this) picks up the rest later.
+        localStorage.setItem(ONBOARDING_DISMISSED_KEY, "true");
+
+        showStartupSyncIndicator();
+        await withTimeout(() => runSyncCycle(), STARTUP_SYNC_TIMEOUT_MS);
+        hideStartupSyncIndicator();
+
+        initProjectFlow();
       }
 
       // Load persisted state on startup

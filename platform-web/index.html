@@ -428,6 +428,21 @@
       </div>
     </div>
 
+    <!-- Startup Sync Indicator — shown briefly for a signed-in user at
+         launch, or right after a first-run sign-in, while a bounded sync
+         pull runs so freshly-synced data is available before the
+         picker/timer screen renders. See core/sync.js's withTimeout()/
+         STARTUP_SYNC_TIMEOUT_MS and core/ui.js's
+         showStartupSyncIndicator()/hideStartupSyncIndicator(). Higher
+         z-index than both screens below — it can show over either. -->
+    <div
+      id="startupSyncIndicator"
+      class="fixed inset-0 bg-slate-900/80 hidden flex-col items-center justify-center z-[110] gap-3"
+    >
+      <i class="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-400"></i>
+      <p class="text-sm font-medium text-white">Syncing...</p>
+    </div>
+
     <!-- First-Run Sign-In-Or-Skip Screen — shown once, before
          initProjectFlow()'s picker, only when there's no session and the
          user hasn't already made a first-run choice. See
