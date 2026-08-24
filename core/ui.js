@@ -83,7 +83,8 @@
 
         // Set default dates in inputs
         const today = new Date().toISOString().split("T")[0];
-        document.getElementById("mDate").value = today;
+        document.getElementById("mStartDate").value = today;
+        document.getElementById("mEndDate").value = today;
         document.getElementById("eDate").value = today;
       });
 
@@ -218,6 +219,26 @@
       }
 
       // Manual Shift Add/Edit Modal
+      //
+      // Start and end are independent date+time pairs (not one shared date)
+      // so an overnight entry (e.g. 11:50 PM -> 2:00 AM) can be represented
+      // directly — the end date simply differs from the start date. This
+      // mirrors how clockIn()/clockOut() already store real Date-derived
+      // timestamps rather than assuming same-day start/end.
+      function showManualEntryError(message) {
+        const el = document.getElementById("mDateTimeError");
+        if (!el) return;
+        el.textContent = message;
+        el.classList.remove("hidden");
+      }
+
+      function clearManualEntryError() {
+        const el = document.getElementById("mDateTimeError");
+        if (!el) return;
+        el.textContent = "";
+        el.classList.add("hidden");
+      }
+
       function toggleManualEntryModal() {
         const modal = document.getElementById("manualEntryModal");
         const isOpening = modal.classList.contains("hidden");
@@ -226,9 +247,13 @@
           document.getElementById("modalTitle").textContent =
             "Add Past Work Entry";
           document.getElementById("manualForm").reset();
-          document.getElementById("mDate").value = new Date()
-            .toISOString()
-            .split("T")[0];
+          clearManualEntryError();
+          // End date defaults to the same day as start — the common case
+          // needs no extra input; the user only changes it for a shift
+          // that actually crosses midnight.
+          const todayStr = new Date().toISOString().split("T")[0];
+          document.getElementById("mStartDate").value = todayStr;
+          document.getElementById("mEndDate").value = todayStr;
           document.getElementById("mRate").value = getActiveRate();
         }
         modal.classList.toggle("hidden");
@@ -241,17 +266,21 @@
 
         editingLogId = id;
         document.getElementById("modalTitle").textContent = "Edit Work Entry";
+        clearManualEntryError();
 
         const startObj = new Date(log.startTimeISO);
         const endObj = new Date(log.endTimeISO);
 
-        document.getElementById("mDate").value = startObj
+        document.getElementById("mStartDate").value = startObj
           .toISOString()
           .split("T")[0];
-        document.getElementById("mStart").value = startObj
+        document.getElementById("mStartTime").value = startObj
           .toTimeString()
           .substring(0, 5);
-        document.getElementById("mEnd").value = endObj
+        document.getElementById("mEndDate").value = endObj
+          .toISOString()
+          .split("T")[0];
+        document.getElementById("mEndTime").value = endObj
           .toTimeString()
           .substring(0, 5);
         document.getElementById("mBreak").value = Math.round(
@@ -266,12 +295,20 @@
         modal.classList.add("flex");
       }
 
+      // A span this long is far more likely a typo (wrong AM/PM, wrong end
+      // date) than a real single shift — flagged with a confirmation
+      // instead of a hard block, since a legitimate long/split entry should
+      // still be possible.
+      const LONG_SHIFT_WARNING_MS = 24 * 60 * 60 * 1000;
+
       function handleManualSubmit(e) {
         e.preventDefault();
+        clearManualEntryError();
 
-        const dateVal = document.getElementById("mDate").value;
-        const startVal = document.getElementById("mStart").value;
-        const endVal = document.getElementById("mEnd").value;
+        const startDateVal = document.getElementById("mStartDate").value;
+        const startTimeVal = document.getElementById("mStartTime").value;
+        const endDateVal = document.getElementById("mEndDate").value;
+        const endTimeVal = document.getElementById("mEndTime").value;
         const breakMins =
           parseInt(document.getElementById("mBreak").value) || 0;
         const rateVal =
@@ -279,21 +316,39 @@
           getActiveRate();
         const notesVal = document.getElementById("mNotes").value.trim();
 
-        if (!dateVal || !startVal || !endVal) return;
+        if (!startDateVal || !startTimeVal || !endDateVal || !endTimeVal)
+          return;
 
-        const startISO = new Date(`${dateVal}T${startVal}:00`).toISOString();
-        const endISO = new Date(`${dateVal}T${endVal}:00`).toISOString();
+        const startISO = new Date(
+          `${startDateVal}T${startTimeVal}:00`,
+        ).toISOString();
+        const endISO = new Date(
+          `${endDateVal}T${endTimeVal}:00`,
+        ).toISOString();
 
         const startMs = new Date(startISO).getTime();
         const endMs = new Date(endISO).getTime();
 
         if (endMs <= startMs) {
-          alert("End time must be after start time.");
+          showManualEntryError(
+            "End date/time must be after the start date/time.",
+          );
           return;
         }
 
-        const breakMs = breakMins * 60 * 1000;
         const grossMs = endMs - startMs;
+        if (grossMs > LONG_SHIFT_WARNING_MS) {
+          const hours = (grossMs / (1000 * 60 * 60)).toFixed(1);
+          if (
+            !confirm(
+              `This entry spans ${hours} hours, which is unusually long for a single shift. Save it anyway?`,
+            )
+          ) {
+            return;
+          }
+        }
+
+        const breakMs = breakMins * 60 * 1000;
         const netMs = Math.max(0, grossMs - breakMs);
 
         if (editingLogId) {
