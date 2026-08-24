@@ -208,6 +208,13 @@ function applyShiftRow(row) {
       notes: row.notes || "",
       updatedAt: rowUpdated,
     };
+    // Land the app in the shift's project, not just adopt the shift data —
+    // an active shift pulled from another device (or adopted after a push
+    // conflict via pushOneOp()'s "adopted-server" path) should open
+    // straight into its project's timer. initProjectFlow() skips the
+    // picker whenever currentShift is set, so this is what makes that land
+    // on the right project.
+    if (localProjectId) activeProjectId = localProjectId;
   } else {
     if (matchesCurrentShift) currentShift = null;
     const clockInMs = getMsTimestamp(row.clock_in);

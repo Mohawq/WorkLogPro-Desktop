@@ -38,6 +38,21 @@
       // resolved `projects`/`activeProjectId` (including running the v2->v3
       // migration if needed). Runs before renderUI() paints the dashboard.
       function initProjectFlow() {
+        // An in-progress shift already tells us which project this launch
+        // is for — skip the picker entirely and land straight on that
+        // project's timer, regardless of how many total projects exist.
+        // Covers both a shift that was already local before this launch,
+        // and one just adopted from another device by applyShiftRow()'s
+        // pull handling (core/sync.js), which runs before this via
+        // runStartupGate() -> runSyncCycle() -> pullChanges().
+        if (currentShift) {
+          if (activeProjectId !== currentShift.projectId) {
+            activeProjectId = currentShift.projectId;
+            persistState();
+          }
+          return;
+        }
+
         if (projects.length === 0) {
           // projects.length === 0 SHOULD mean "genuinely fresh install,"
           // but it can also mean loadStoredData() didn't finish reading
