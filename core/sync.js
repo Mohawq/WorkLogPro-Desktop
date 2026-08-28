@@ -303,6 +303,17 @@ function invoiceToParams(record) {
         // the rest of this meta object, see this file's header comment).
         paid: !!record.paid,
         paidAt: record.paidAt || null,
+        // numberSource/exported are facts about the invoice itself (how
+        // its number was assigned, whether it's actually been sent) —
+        // not per-device UI state — so they need to round-trip the same
+        // way, e.g. reconcileInvoiceNumberIfNeeded() flipping
+        // numberSource local -> server on one device must reach a
+        // second device rather than staying stale there forever. Also
+        // fixes applyInvoiceRow() previously never receiving these at
+        // all, which left every pulled invoice with numberSource/
+        // exported === undefined.
+        numberSource: record.numberSource || "local",
+        exported: record.exported !== undefined ? !!record.exported : true,
       },
       items: record.lineItems || [],
     },
@@ -331,6 +342,17 @@ function applyInvoiceRow(row) {
     0,
   );
 
+  // Fields below that fall back to `existing` (rather than a bare
+  // default) are local-only facts that a row from a PRE-fix client won't
+  // carry in meta at all — merge into the current local record instead
+  // of replacing it wholesale, so a pull that simply doesn't happen to
+  // carry one of these never silently wipes what's already trusted
+  // locally (this is what caused numberSource/exported to revert to
+  // undefined on every pull before this fix — see this function's
+  // header). meta's own value always wins when present, since the LWW
+  // check above already confirmed this row is newer than what's local.
+  const existing = idx !== -1 ? invoices[idx] : null;
+
   const merged = {
     id: idx !== -1 ? invoices[idx].id : nextLocalNumericId(),
     syncId: row.id,
@@ -342,8 +364,32 @@ function applyInvoiceRow(row) {
     language: row.language || "en",
     isProductInvoice: !!meta.isProductInvoice,
     productAmountMode: meta.productAmountMode || "calculated",
-    paid: !!meta.paid,
-    paidAt: meta.paidAt || null,
+    paid:
+      meta.paid !== undefined
+        ? !!meta.paid
+        : existing
+          ? !!existing.paid
+          : false,
+    paidAt:
+      meta.paidAt !== undefined
+        ? meta.paidAt || null
+        : existing
+          ? existing.paidAt || null
+          : null,
+    // numberSource/exported: same "meta wins when present, else preserve
+    // what's already local, else fall back to migrateV4ToV5()'s own
+    // established defaults for equally-ambiguous legacy data" pattern —
+    // exported defaults true (a legacy row's mere existence implies it
+    // was already sent, same reasoning as that migration), numberSource
+    // defaults "local" (worst case triggers one harmless extra
+    // reconciliation attempt, never actual data loss).
+    numberSource: meta.numberSource || (existing && existing.numberSource) || "local",
+    exported:
+      meta.exported !== undefined
+        ? !!meta.exported
+        : existing
+          ? !!existing.exported
+          : true,
     lineItems: items,
     discount,
     subtotal: itemsTotal,
