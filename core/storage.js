@@ -272,6 +272,11 @@
               migrateV4ToV5();
             }
 
+            // v5 -> v6: invoice paid/paidAt (see migrateV5ToV6()).
+            if (storedVersion < 6) {
+              migrateV5ToV6();
+            }
+
             if (storedVersion < SCHEMA_VERSION) {
               persistState();
             }

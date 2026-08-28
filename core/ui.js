@@ -608,6 +608,19 @@
         const totalWorkedHours = (totalWorkedMs / (1000 * 60 * 60)).toFixed(2);
         const grandTotalPayout = totalWorkEarnings + totalExpenses;
 
+        // Total Payout Due is what's still OWED — a paid invoice's amount
+        // (the actual saved invoice total, discount/manual line items and
+        // all, not a re-derivation from logs/expenses) comes back out here
+        // only. Work Earnings/Expenses above stay historical and
+        // unaffected by payment status.
+        let paidInvoicesTotal = 0;
+        invoices
+          .filter((inv) => inv.projectId === activeProjectId && inv.paid)
+          .forEach((inv) => {
+            paidInvoicesTotal += Number(inv.total) || 0;
+          });
+        const outstandingPayout = grandTotalPayout - paidInvoicesTotal;
+
         document.getElementById("statWorkedHours").textContent =
           `${isNaN(totalWorkedHours) ? "0.00" : totalWorkedHours} hrs`;
         document.getElementById("statEarnings").textContent =
@@ -615,7 +628,7 @@
         document.getElementById("statExpenses").textContent =
           `$${(isNaN(totalExpenses) ? 0 : totalExpenses).toFixed(2)}`;
         document.getElementById("statTotalPayout").textContent =
-          `$${(isNaN(grandTotalPayout) ? 0 : grandTotalPayout).toFixed(2)}`;
+          `$${(isNaN(outstandingPayout) ? 0 : outstandingPayout).toFixed(2)}`;
       }
 
       function formatMs(ms, includeHours = true) {

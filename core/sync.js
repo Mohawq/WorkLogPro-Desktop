@@ -299,6 +299,10 @@ function invoiceToParams(record) {
         businessName: record.businessName || "",
         isProductInvoice: !!record.isProductInvoice,
         productAmountMode: record.productAmountMode || "calculated",
+        // paid/paidAt — no dedicated columns either (same reasoning as
+        // the rest of this meta object, see this file's header comment).
+        paid: !!record.paid,
+        paidAt: record.paidAt || null,
       },
       items: record.lineItems || [],
     },
@@ -338,6 +342,8 @@ function applyInvoiceRow(row) {
     language: row.language || "en",
     isProductInvoice: !!meta.isProductInvoice,
     productAmountMode: meta.productAmountMode || "calculated",
+    paid: !!meta.paid,
+    paidAt: meta.paidAt || null,
     lineItems: items,
     discount,
     subtotal: itemsTotal,

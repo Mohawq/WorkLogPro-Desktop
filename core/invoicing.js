@@ -1198,6 +1198,11 @@
           discount: snapshot.discount,
           subtotal: snapshot.laborSubtotal + snapshot.expensesSubtotal,
           total: snapshot.total,
+          // Re-saving (e.g. reopening a paid invoice to tweak a line item)
+          // must not silently reset payment status back to unpaid — only
+          // toggleInvoicePaid() ever changes these.
+          paid: existingIdx !== -1 ? !!invoices[existingIdx].paid : false,
+          paidAt: existingIdx !== -1 ? invoices[existingIdx].paidAt || null : null,
           // Only the on/off choice is saved, never the image itself — it
           // stays stored once in settings (signatureImage) and is resolved
           // fresh whenever this invoice is reopened or re-exported.
@@ -1270,6 +1275,9 @@
 
         activeInvoices.forEach((inv) => {
           const clientFirstLine = (inv.clientDetails || "").split("\n")[0] || "—";
+          const statusBadge = inv.paid
+            ? `<span class="px-2 py-1 text-xs rounded-lg font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Paid</span>`
+            : `<span class="px-2 py-1 text-xs rounded-lg font-medium bg-amber-50 text-amber-700 border border-amber-200">Outstanding</span>`;
           const tr = document.createElement("tr");
           tr.className = "hover:bg-slate-50/80 transition";
           tr.innerHTML = `
@@ -1278,8 +1286,12 @@
             <td class="px-6 py-4 whitespace-nowrap">${escapeHtml(inv.dateIssued || "")}</td>
             <td class="px-6 py-4 font-semibold text-emerald-600 whitespace-nowrap">$${(Number(inv.total) || 0).toFixed(2)}</td>
             <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 py-1 text-xs rounded-lg font-medium bg-slate-100 text-slate-600">${inv.language === "ar" ? "AR" : "EN"}</span></td>
+            <td class="px-6 py-4 whitespace-nowrap">${statusBadge}</td>
             <td class="px-6 py-4 text-right whitespace-nowrap">
               <div class="flex items-center justify-end gap-1">
+                <button onclick="toggleInvoicePaid(${inv.id})" class="${inv.paid ? "text-emerald-600 hover:text-slate-500" : "text-slate-400 hover:text-emerald-600"} transition px-2 py-1" title="${inv.paid ? "Mark as Unpaid" : "Mark as Paid"}">
+                  <i class="fa-solid fa-circle-dollar-to-slot"></i>
+                </button>
                 <button onclick="reopenInvoice(${inv.id})" class="text-slate-400 hover:text-indigo-600 transition px-2 py-1" title="Reopen Invoice">
                   <i class="fa-solid fa-arrow-up-right-from-square"></i>
                 </button>
@@ -1291,6 +1303,25 @@
           `;
           tbody.appendChild(tr);
         });
+      }
+
+      // Toggle only — mistakes/accidental clicks should be reversible
+      // without editing raw storage. Only an already-exported invoice is
+      // eligible: an unexported provisional draft (see CLAUDE.md section
+      // 4K) was never sent, so nothing could have been paid yet. Enforced
+      // here, not just by the UI only showing this control for exported
+      // rows in renderInvoiceHistory() — the function itself must not
+      // trust the caller.
+      function toggleInvoicePaid(id) {
+        const inv = invoices.find((i) => i.id === id);
+        if (!inv || !inv.exported) return;
+
+        inv.paid = !inv.paid;
+        inv.paidAt = inv.paid ? new Date().toISOString() : null;
+        stampAndSync("invoices", inv);
+        persistState();
+        renderInvoiceHistory();
+        renderStats();
       }
 
       function reopenInvoice(id) {
@@ -1364,5 +1395,9 @@
         invoices = invoices.filter((inv) => inv.id !== id);
         persistState();
         renderInvoiceHistory();
+        // A deleted invoice may have been marked paid — its amount was
+        // being subtracted from Total Payout Due (see renderStats()), so
+        // that figure needs to be refreshed too, not just the history list.
+        renderStats();
       }
 

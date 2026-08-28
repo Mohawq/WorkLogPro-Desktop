@@ -4,7 +4,7 @@
 // I/O (that's storage.js), no window.platformAdapter use.
 
       // State Variables
-      const SCHEMA_VERSION = 5; // v5 adds invoice numberSource/exported + syncConflicts[] — see migrateV4ToV5()
+      const SCHEMA_VERSION = 6; // v6 adds invoice paid/paidAt — see migrateV5ToV6()
       const STORAGE_KEY = "wt_state";
       // Whether the user has made a first-run choice (sign in, or
       // explicitly "Continue without an account") on the sign-in-or-skip
@@ -227,6 +227,19 @@
           ...inv,
           numberSource: inv.numberSource || "local",
           exported: inv.exported !== undefined ? inv.exported : true,
+        }));
+      }
+
+      // v5 -> v6: mark-as-paid tracking. Every pre-existing invoice
+      // defaults to unpaid — being marked paid is a deliberate user action
+      // going forward, not something to infer retroactively just because
+      // an invoice already exists (a real client may well still owe for
+      // an invoice created before this feature existed).
+      function migrateV5ToV6() {
+        invoices = invoices.map((inv) => ({
+          ...inv,
+          paid: inv.paid === true,
+          paidAt: inv.paid === true ? inv.paidAt || null : null,
         }));
       }
 
