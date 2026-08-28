@@ -23,19 +23,39 @@
     <meta name="apple-mobile-web-app-title" content="WorkLog Pro" />
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Design tokens — see docs/design-tokens.md for the full rationale.
+         Approved palette: primary/secondary/accent/destructive are the
+         only new custom colors; background/foreground/most semantic
+         colors already matched Tailwind's stock slate-50/slate-900/
+         emerald-600/blue-600 exactly, so those keep using the native
+         classes instead of adding redundant aliases. -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#1E3A5F",
+              secondary: "#2563EB",
+              accent: "#059669",
+              destructive: "#DC2626",
+            },
+          },
+        },
+      };
+    </script>
     <!-- FontAwesome Icons -->
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <!-- Inter Font -->
+    <!-- Public Sans -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <style>
       body {
-        font-family: "Inter", sans-serif;
+        font-family: "Public Sans", sans-serif;
       }
       @keyframes pulse-ring {
         0% {
@@ -64,24 +84,177 @@
       .safe-bottom {
         padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
       }
+      /* Clears the FIXED bottom tab bar specifically — distinct from
+         .safe-bottom above (iOS home-indicator clearance only, used by
+         the settings sheet, which sits above/over the tab bar and needs
+         no tab-bar allowance). 79px is the tab bar's measured rendered
+         height (.tab-btn's py-2.5 + icon/label line-heights + border) —
+         84px adds a small safety margin rather than matching it exactly.
+         Applied to <main>, the one shared container that already wraps
+         all three tabs, so one rule covers all of them. */
+      .safe-bottom-nav {
+        padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+      }
 
-      /* Bottom tab bar active state — reuses indigo-600 (#4f46e5), the same
-         accent already used on the Create Invoice / primary action buttons
-         elsewhere in this file, rather than introducing a new color. */
+      /* Bottom tab bar active state. */
       .tab-btn {
         color: #94a3b8;
       }
       .tab-btn.active {
-        color: #4f46e5;
+        color: #1e3a5f;
       }
       .tab-btn.active span {
         font-weight: 700;
       }
+
+      /* Stacked-card layout for the Logs/Expenses/Invoices tables below a
+         mobile width breakpoint (audit Top-5 #2: these tables lost their
+         Amount/Status/Action columns off-screen with no scroll
+         affordance — Invoices specifically hid the mark-as-paid control
+         entirely). Pure CSS: the <table>/<td> markup itself is rendered
+         by core/ui.js's renderLogsTable()/renderExpensesTable() and
+         core/invoicing.js's renderInvoiceHistory() — shared, unchanged,
+         identical to what platform-electron still renders as a normal
+         table. Only presentation differs here, via nth-of-type ::before
+         labels (column order is fixed and known from each table's own
+         <thead>, so no data-* attribute needs adding to the shared JS
+         templates for this). */
+      @media (max-width: 640px) {
+        .stack-table table,
+        .stack-table tbody,
+        .stack-table tr,
+        .stack-table td {
+          display: block;
+          width: 100%;
+        }
+        .stack-table thead {
+          display: none;
+        }
+        .stack-table tbody tr {
+          padding: 14px 16px;
+          border-bottom: 1px solid #f1f5f9;
+        }
+        .stack-table tbody tr:last-child {
+          border-bottom: none;
+        }
+        .stack-table td {
+          padding: 4px 0 !important;
+          white-space: normal !important;
+        }
+        .stack-table td::before {
+          display: block;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #94a3b8;
+          margin-bottom: 2px;
+        }
+        /* Action column: a dashed divider instead of a redundant "Action"
+           label right above a row of icon buttons. */
+        .stack-table td:last-child {
+          margin-top: 8px;
+          padding-top: 10px !important;
+          border-top: 1px dashed #e2e8f0;
+        }
+        .stack-table td:last-child::before {
+          content: none;
+        }
+        /* The icon action buttons (mark-paid / reopen / delete / edit) are
+           sized px-2 py-1 in the shared render templates — fine for a
+           mouse pointer, too small for the 44px HIG minimum this fix now
+           exposes them to on mobile. Bump the tap target here via CSS
+           only, scoped to this table context, rather than resizing the
+           shared markup (which would also change platform-electron's
+           icon buttons, not asked for and not needed there). */
+        .stack-table td:last-child button {
+          min-width: 44px;
+          min-height: 44px;
+        }
+
+        .stack-table-logs td:nth-of-type(1)::before {
+          content: "Date";
+        }
+        .stack-table-logs td:nth-of-type(2)::before {
+          content: "Shift Times";
+        }
+        .stack-table-logs td:nth-of-type(3)::before {
+          content: "Break";
+        }
+        .stack-table-logs td:nth-of-type(4)::before {
+          content: "Net Hours";
+        }
+        .stack-table-logs td:nth-of-type(5)::before {
+          content: "Pay";
+        }
+
+        .stack-table-expenses td:nth-of-type(1)::before {
+          content: "Date";
+        }
+        .stack-table-expenses td:nth-of-type(2)::before {
+          content: "Title / Description";
+        }
+        .stack-table-expenses td:nth-of-type(3)::before {
+          content: "Category";
+        }
+        .stack-table-expenses td:nth-of-type(4)::before {
+          content: "Amount";
+        }
+        .stack-table-expenses td:nth-of-type(5)::before {
+          content: "Receipt / Attachment";
+        }
+
+        .stack-table-invoices td:nth-of-type(1)::before {
+          content: "Invoice #";
+        }
+        .stack-table-invoices td:nth-of-type(2)::before {
+          content: "Client";
+        }
+        .stack-table-invoices td:nth-of-type(3)::before {
+          content: "Date Issued";
+        }
+        .stack-table-invoices td:nth-of-type(4)::before {
+          content: "Total";
+        }
+        .stack-table-invoices td:nth-of-type(5)::before {
+          content: "Lang";
+        }
+        .stack-table-invoices td:nth-of-type(6)::before {
+          content: "Status";
+        }
+      }
+
+      /* Shared modal open/close transition — see platform-electron/
+         shell.html's copy of this rule for the full rationale. Same
+         technique, same six modal roots, no JS changed. */
+      .modal-transition {
+        transition:
+          opacity 180ms ease,
+          transform 180ms ease,
+          display 180ms allow-discrete;
+      }
+      .modal-transition:not(.hidden) {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .modal-transition.hidden {
+        opacity: 0;
+        transform: scale(0.96);
+      }
+      @starting-style {
+        .modal-transition:not(.hidden) {
+          opacity: 0;
+          transform: scale(0.96);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .modal-transition {
+          transition-duration: 0.001ms;
+        }
+      }
     </style>
   </head>
-  <body
-    class="bg-slate-50 text-slate-800 min-h-screen"
-    style="padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px))"
+  <body class="bg-slate-50 text-slate-800 min-h-screen"
   >
     <!-- Top Navigation Header: ~88-96px incl. safe-area-inset-top, so the
          title never sits under an iPhone notch/status bar. Only icon +
@@ -100,7 +273,7 @@
             <i class="fa-solid fa-clock text-xl text-indigo-400"></i>
           </div>
           <div class="min-w-0">
-            <h1 class="text-[17px] font-medium tracking-tight text-white leading-tight truncate">
+            <h1 class="text-lg font-medium tracking-tight text-white leading-tight truncate">
               WorkLog Pro
             </h1>
             <p
@@ -155,7 +328,7 @@
           <!-- Project -->
           <div>
             <h4
-              class="text-[13px] font-semibold text-slate-400 uppercase tracking-wider mb-2"
+              class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2"
             >
               Project
             </h4>
@@ -169,7 +342,7 @@
               <button
                 id="switchProjectBtn"
                 onclick="requestSwitchProject()"
-                class="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold underline decoration-dotted disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed shrink-0"
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline decoration-dotted disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed shrink-0"
               >
                 Switch
               </button>
@@ -179,7 +352,7 @@
           <!-- Shift Settings (moved from the Timer tab) -->
           <div>
             <h4
-              class="text-[13px] font-semibold text-slate-400 uppercase tracking-wider mb-3"
+              class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3"
             >
               Shift Settings
             </h4>
@@ -203,10 +376,10 @@
                     step="0.50"
                     min="0"
                     onchange="saveRate()"
-                    class="block w-full min-h-[44px] rounded-xl border-slate-300 pl-8 pr-3 py-2.5 text-base border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="block w-full min-h-[44px] rounded-xl border-slate-300 pl-8 pr-3 py-2.5 text-base border focus:ring-2 focus:ring-primary focus:outline-none"
                   />
                 </div>
-                <p id="rateProjectHint" class="text-[11px] text-slate-400 mt-1">
+                <p id="rateProjectHint" class="text-xs text-slate-400 mt-1">
                   Select a project to set its rate
                 </p>
               </div>
@@ -220,7 +393,7 @@
                   type="text"
                   id="notesInput"
                   placeholder="Task details, job code..."
-                  class="block w-full min-h-[44px] rounded-xl border-slate-300 px-3 py-2.5 text-base border focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="block w-full min-h-[44px] rounded-xl border-slate-300 px-3 py-2.5 text-base border focus:ring-2 focus:ring-primary focus:outline-none"
                 />
               </div>
 
@@ -254,12 +427,12 @@
                     type="button"
                     id="signatureRemoveBtn"
                     onclick="removeSignature()"
-                    class="hidden text-xs text-rose-600 hover:text-rose-800 font-semibold"
+                    class="hidden text-xs text-destructive hover:text-destructive font-semibold"
                   >
                     Remove
                   </button>
                 </div>
-                <p class="text-[11px] text-slate-400 mt-1">
+                <p class="text-xs text-slate-400 mt-1">
                   Appears automatically on every generated invoice.
                 </p>
               </div>
@@ -300,7 +473,7 @@
                         id="authPasswordEmailInput"
                         required
                         placeholder="you@example.com"
-                        class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-primary focus:outline-none"
                       />
                       <div class="relative">
                         <input
@@ -309,7 +482,7 @@
                           required
                           minlength="6"
                           placeholder="Password"
-                          class="w-full min-h-[44px] px-3 py-2.5 pr-11 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          class="w-full min-h-[44px] px-3 py-2.5 pr-11 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-primary focus:outline-none"
                         />
                         <button
                           type="button"
@@ -325,21 +498,21 @@
                           type="button"
                           id="authSignUpToggle"
                           onclick="togglePasswordSignUpMode()"
-                          class="min-h-[44px] text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold text-left"
+                          class="min-h-[44px] text-xs text-indigo-600 hover:text-indigo-800 font-semibold text-left"
                         >
                           New here? Create an account
                         </button>
                         <button
                           type="submit"
                           id="authPasswordSubmitBtn"
-                          class="min-h-[44px] px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-xs font-semibold rounded-xl transition shrink-0"
+                          class="min-h-[44px] px-3 py-2 bg-primary hover:bg-primary/90 disabled:bg-slate-300 text-white text-xs font-semibold rounded-xl transition shrink-0"
                         >
                           Sign In
                         </button>
                       </div>
                     </form>
 
-                    <p id="authStatusMessage" class="text-[11px] text-slate-400 mt-2"></p>
+                    <p id="authStatusMessage" class="text-xs text-slate-400 mt-2"></p>
                   </div>
                 </div>
 
@@ -348,7 +521,7 @@
                     Signed in as
                     <span id="authUserEmail" class="font-medium"></span>
                   </p>
-                  <p id="authLastSyncedText" class="text-[11px] text-slate-400">
+                  <p id="authLastSyncedText" class="text-xs text-slate-400">
                     Not synced yet
                   </p>
                   <div class="grid grid-cols-2 gap-2">
@@ -372,8 +545,8 @@
                   <!-- Sync Conflicts — see core/auth.js's
                        renderSyncConflicts(). Hidden whenever syncConflicts
                        is empty (the normal case). -->
-                  <div id="syncConflictsSection" class="hidden pt-2 border-t border-rose-100">
-                    <p class="text-[11px] font-semibold text-rose-600 uppercase tracking-wider mb-1">
+                  <div id="syncConflictsSection" class="hidden pt-2 border-t border-destructive/20">
+                    <p class="text-xs font-semibold text-destructive uppercase tracking-wider mb-1">
                       Sync Conflicts
                     </p>
                     <ul id="syncConflictsList" class="space-y-1.5 text-xs text-slate-600"></ul>
@@ -386,7 +559,7 @@
           <!-- Data -->
           <div>
             <h4
-              class="text-[13px] font-semibold text-slate-400 uppercase tracking-wider mb-3"
+              class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3"
             >
               Data
             </h4>
@@ -420,7 +593,7 @@
                getElementById(...).textContent and would throw on a null
                element. Kept as an unobtrusive footer line instead of being
                removed. -->
-          <div class="text-center text-[11px] text-slate-300 pt-1">
+          <div class="text-center text-xs text-slate-300 pt-1">
             <span id="liveClock">00:00:00 AM</span> ·
             <span id="liveDate">Monday, Jan 1</span>
           </div>
@@ -460,7 +633,7 @@
       >
         <div class="text-center">
           <div
-            class="mx-auto w-12 h-12 rounded-xl bg-indigo-600/10 flex items-center justify-center mb-3"
+            class="mx-auto w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3"
           >
             <i class="fa-solid fa-cloud-arrow-down text-xl text-indigo-600"></i>
           </div>
@@ -492,7 +665,7 @@
     <!-- Project Picker Screen -->
     <div
       id="projectPickerScreen"
-      class="fixed inset-0 bg-slate-900/95 hidden flex-col items-center justify-center p-6 z-[100] overflow-y-auto"
+      class="fixed inset-0 bg-slate-900/95 hidden flex-col items-center justify-center p-6 z-[100] overflow-y-auto modal-transition"
     >
       <div
         class="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 space-y-5 my-8"
@@ -535,7 +708,7 @@
                 id="newProjectName"
                 required
                 placeholder="e.g. Almurooj School"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
             <div>
@@ -549,12 +722,12 @@
                 min="0"
                 required
                 placeholder="20.00"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
             <button
               type="submit"
-              class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+              class="w-full py-2.5 bg-primary hover:bg-primary/90 text-white font-medium rounded-xl text-sm transition shadow-sm"
             >
               <i class="fa-solid fa-plus"></i> Add & Select Project
             </button>
@@ -571,7 +744,7 @@
          and no reparenting script. Only #tab-timer starts visible; the
          other two start with the "hidden" class and mobile-nav.js's
          showTab() toggles it on tab-bar taps. -->
-    <main class="max-w-7xl mx-auto px-4 pt-4">
+    <main class="max-w-7xl mx-auto px-4 pt-4 safe-bottom-nav">
       <!-- Timer Tab -->
       <div id="tab-timer" class="space-y-5">
         <!-- Clock Control Card -->
@@ -619,9 +792,9 @@
             <button
               type="button"
               onclick="openEditActiveBreakModal()"
-              class="mt-2 text-[11px] text-indigo-500 hover:text-indigo-700 font-medium transition"
+              class="mt-2 text-xs text-indigo-500 hover:text-indigo-700 font-medium transition"
             >
-              <i class="fa-solid fa-pen text-[10px]"></i> Adjust break time
+              <i class="fa-solid fa-pen text-xs"></i> Adjust break time
             </button>
           </div>
 
@@ -658,7 +831,7 @@
               id="clockOutBtn"
               onclick="clockOut()"
               disabled
-              class="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-base"
+              class="w-full py-3.5 px-4 bg-destructive hover:bg-destructive/90 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-sm transition flex items-center justify-center gap-2 text-base"
             >
               <i class="fa-solid fa-stop"></i> Clock Out
             </button>
@@ -700,13 +873,13 @@
               $0.00
             </div>
           </div>
-          <div class="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-            <div class="text-xs font-semibold text-indigo-500 uppercase">
+          <div class="bg-primary p-4 rounded-2xl">
+            <div class="text-xs font-semibold text-white/70 uppercase">
               Total Payout Due
             </div>
             <div
               id="statTotalPayout"
-              class="text-lg font-extrabold text-indigo-700 mt-1"
+              class="text-xl font-extrabold text-white mt-1"
             >
               $0.00
             </div>
@@ -734,7 +907,7 @@
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-slate-600">
+            <table class="w-full text-left text-sm text-slate-600 stack-table stack-table-logs">
               <thead
                 class="bg-slate-50 text-slate-400 text-xs uppercase border-b border-slate-100"
               >
@@ -792,14 +965,14 @@
             </div>
             <button
               onclick="openCreateInvoiceModal()"
-              class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shrink-0"
+              class="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shrink-0"
             >
               <i class="fa-solid fa-file-invoice"></i> Create Invoice
             </button>
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-slate-600">
+            <table class="w-full text-left text-sm text-slate-600 stack-table stack-table-expenses">
               <thead
                 class="bg-slate-50 text-slate-400 text-xs uppercase border-b border-slate-100"
               >
@@ -843,7 +1016,7 @@
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-slate-600">
+            <table class="w-full text-left text-sm text-slate-600 stack-table stack-table-invoices">
               <thead
                 class="bg-slate-50 text-slate-400 text-xs uppercase border-b border-slate-100"
               >
@@ -885,7 +1058,7 @@
           class="tab-btn active flex flex-col items-center justify-center gap-1 py-2.5"
         >
           <i class="fa-solid fa-clock text-lg"></i>
-          <span class="text-[11px]">Timer</span>
+          <span class="text-xs">Timer</span>
         </button>
         <button
           type="button"
@@ -894,7 +1067,7 @@
           class="tab-btn flex flex-col items-center justify-center gap-1 py-2.5"
         >
           <i class="fa-solid fa-receipt text-lg"></i>
-          <span class="text-[11px]">Expenses</span>
+          <span class="text-xs">Expenses</span>
         </button>
         <button
           type="button"
@@ -903,7 +1076,7 @@
           class="tab-btn flex flex-col items-center justify-center gap-1 py-2.5"
         >
           <i class="fa-solid fa-file-invoice text-lg"></i>
-          <span class="text-[11px]">Invoices</span>
+          <span class="text-xs">Invoices</span>
         </button>
       </div>
     </nav>
@@ -911,7 +1084,7 @@
     <!-- Manual Entry / Edit Modal -->
     <div
       id="manualEntryModal"
-      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50 modal-transition"
     >
       <div
         class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4"
@@ -944,7 +1117,7 @@
                 type="date"
                 id="mStartDate"
                 required
-                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
             <div>
@@ -955,7 +1128,7 @@
                 type="time"
                 id="mStartTime"
                 required
-                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
           </div>
@@ -968,7 +1141,7 @@
                 type="date"
                 id="mEndDate"
                 required
-                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
             <div>
@@ -979,13 +1152,13 @@
                 type="time"
                 id="mEndTime"
                 required
-                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full min-h-[44px] px-3 py-2.5 border border-slate-300 rounded-xl text-base focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
           </div>
           <div
             id="mDateTimeError"
-            class="hidden text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2"
+            class="hidden text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2"
           ></div>
           <div class="grid grid-cols-2 gap-3">
             <div>
@@ -997,7 +1170,7 @@
                 id="mBreak"
                 min="0"
                 value="0"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
             <div>
@@ -1009,7 +1182,7 @@
                 id="mRate"
                 step="0.50"
                 min="0"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
           </div>
@@ -1021,7 +1194,7 @@
               type="text"
               id="mNotes"
               placeholder="Optional notes or job details"
-              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
             />
           </div>
 
@@ -1035,7 +1208,7 @@
             </button>
             <button
               type="submit"
-              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+              class="w-1/2 py-2.5 bg-primary hover:bg-primary/90 text-white font-medium rounded-xl text-sm transition shadow-sm"
             >
               Save Entry
             </button>
@@ -1047,7 +1220,7 @@
     <!-- Adjust Active Break Modal -->
     <div
       id="editBreakModal"
-      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50 modal-transition"
     >
       <div
         class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100 space-y-4"
@@ -1084,7 +1257,7 @@
               id="ebBreakMinutes"
               min="0"
               required
-              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
             />
           </div>
 
@@ -1098,7 +1271,7 @@
             </button>
             <button
               type="submit"
-              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+              class="w-1/2 py-2.5 bg-primary hover:bg-primary/90 text-white font-medium rounded-xl text-sm transition shadow-sm"
             >
               Save
             </button>
@@ -1110,7 +1283,7 @@
     <!-- Expense Modal -->
     <div
       id="expenseModal"
-      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50 modal-transition"
     >
       <div
         class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4"
@@ -1142,7 +1315,7 @@
               type="date"
               id="eDate"
               required
-              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
             />
           </div>
           <div>
@@ -1154,7 +1327,7 @@
               id="eTitle"
               required
               placeholder="e.g., Office Supplies, Fuel, Software Subscription"
-              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
             />
           </div>
           <div class="grid grid-cols-2 gap-3">
@@ -1169,7 +1342,7 @@
                 min="0.01"
                 required
                 placeholder="0.00"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
             <div>
@@ -1178,7 +1351,7 @@
               >
               <select
                 id="eCategory"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               >
                 <option value="Supplies">Supplies</option>
                 <option value="Travel/Fuel">Travel / Fuel</option>
@@ -1198,7 +1371,7 @@
               accept="image/*,.pdf,.doc,.docx"
               class="w-full px-3 py-1.5 border border-slate-300 rounded-xl text-xs text-slate-600 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
             />
-            <p class="text-[11px] text-slate-400 mt-1">
+            <p class="text-xs text-slate-400 mt-1">
               Supports image files, PDF documents, or receipts.
             </p>
           </div>
@@ -1213,7 +1386,7 @@
             </button>
             <button
               type="submit"
-              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+              class="w-1/2 py-2.5 bg-primary hover:bg-primary/90 text-white font-medium rounded-xl text-sm transition shadow-sm"
             >
               Save Expense
             </button>
@@ -1225,7 +1398,7 @@
     <!-- Create Invoice Modal -->
     <div
       id="createInvoiceModal"
-      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50 modal-transition"
     >
       <div
         class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto"
@@ -1245,70 +1418,83 @@
         <form
           id="createInvoiceForm"
           onsubmit="handleCreateInvoiceSubmit(event)"
-          class="space-y-4"
+          class="space-y-6"
         >
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1"
-                >Your Name / Business</label
-              >
-              <input
-                type="text"
-                id="invBusinessName"
-                placeholder="e.g. Jane Doe Consulting"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-700 mb-1"
-                >Invoice Number</label
-              >
-              <input
-                type="text"
-                id="invNumber"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-          </div>
-
+          <!-- Real section separation (audit Top-5 #5). Same
+               divider+heading pattern used throughout this pass, for
+               consistency across the app. -->
           <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1"
-              >Bill To (client name, company, email...)</label
-            >
-            <textarea
-              id="invClientDetails"
-              rows="3"
-              placeholder="Client Name&#10;Company&#10;client@email.com"
-              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            ></textarea>
+            <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              Invoice Details
+            </h4>
+            <div class="space-y-3">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-slate-700 mb-1"
+                    >Your Name / Business</label
+                  >
+                  <input
+                    type="text"
+                    id="invBusinessName"
+                    placeholder="e.g. Jane Doe Consulting"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-700 mb-1"
+                    >Invoice Number</label
+                  >
+                  <input
+                    type="text"
+                    id="invNumber"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1"
+                  >Bill To (client name, company, email...)</label
+                >
+                <textarea
+                  id="invClientDetails"
+                  rows="3"
+                  placeholder="Client Name&#10;Company&#10;client@email.com"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                ></textarea>
+              </div>
+
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1"
+                  >Date Issued</label
+                >
+                <input
+                  type="date"
+                  id="invDateIssued"
+                  required
+                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label class="block text-xs font-medium text-slate-700 mb-1"
-              >Date Issued</label
-            >
-            <input
-              type="date"
-              id="invDateIssued"
-              required
-              class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            />
-          </div>
-
-          <div class="border-t border-slate-100 pt-4">
-            <label class="block text-xs font-medium text-slate-700 mb-1"
-              >Shift & Expense Date Range</label
-            >
+          <div class="border-t border-slate-100 pt-6">
+            <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              Date Range
+            </h4>
+            <p class="text-xs text-slate-500 mb-2">
+              Which shifts and expenses should this invoice pull from?
+            </p>
             <div class="grid grid-cols-2 gap-3">
               <input
                 type="date"
                 id="invRangeStart"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
               <input
                 type="date"
                 id="invRangeEnd"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
             <button
@@ -1320,24 +1506,29 @@
             </button>
           </div>
 
-          <div id="invRecordsPicker" class="hidden space-y-4">
-            <div>
-              <div class="text-xs font-semibold text-slate-500 uppercase mb-1">
-                Shifts
+          <div id="invRecordsPicker" class="hidden border-t border-slate-100 pt-6">
+            <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              Select Work &amp; Expenses
+            </h4>
+            <div class="space-y-4">
+              <div>
+                <div class="text-xs font-semibold text-slate-500 uppercase mb-1">
+                  Shifts
+                </div>
+                <div
+                  id="invShiftChecklist"
+                  class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl px-3 py-2"
+                ></div>
               </div>
-              <div
-                id="invShiftChecklist"
-                class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl px-3 py-2"
-              ></div>
-            </div>
-            <div>
-              <div class="text-xs font-semibold text-slate-500 uppercase mb-1">
-                Expenses
+              <div>
+                <div class="text-xs font-semibold text-slate-500 uppercase mb-1">
+                  Expenses
+                </div>
+                <div
+                  id="invExpenseChecklist"
+                  class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl px-3 py-2"
+                ></div>
               </div>
-              <div
-                id="invExpenseChecklist"
-                class="max-h-40 overflow-y-auto border border-slate-200 rounded-xl px-3 py-2"
-              ></div>
             </div>
           </div>
 
@@ -1351,7 +1542,7 @@
             </button>
             <button
               type="submit"
-              class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm transition shadow-sm"
+              class="w-1/2 py-2.5 bg-primary hover:bg-primary/90 text-white font-medium rounded-xl text-sm transition shadow-sm"
             >
               Continue to Preview
             </button>
@@ -1363,7 +1554,7 @@
     <!-- Invoice Preview Modal -->
     <div
       id="invoicePreviewModal"
-      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50"
+      class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 backdrop-blur-sm z-50 modal-transition"
     >
       <div
         class="bg-white rounded-2xl max-w-6xl w-full p-6 shadow-xl border border-slate-100 space-y-4 max-h-[95vh] overflow-y-auto"
@@ -1377,7 +1568,7 @@
               type="button"
               id="pvLangEnBtn"
               onclick="setInvoiceLanguage('en')"
-              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-indigo-600 text-white"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-primary text-white"
             >
               EN
             </button>
@@ -1410,7 +1601,7 @@
                   type="text"
                   id="pvBusinessName"
                   oninput="renderInvoiceLivePreview()"
-                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
                 />
               </div>
               <div>
@@ -1421,14 +1612,14 @@
                   type="text"
                   id="pvInvoiceNumber"
                   oninput="renderInvoiceLivePreview()"
-                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
                 />
                 <!-- Shown when invoiceDraft.numberSource === "server" — see
                      openInvoicePreview() in core/invoicing.js. Whatever was
                      typed in the Create modal's Invoice Number field gets
                      silently overridden by the server-assigned number in
                      that case; this is what actually tells the user so. -->
-                <p id="pvNumberSourceHint" class="hidden text-[11px] text-indigo-600 mt-1">
+                <p id="pvNumberSourceHint" class="hidden text-xs text-indigo-600 mt-1">
                   <i class="fa-solid fa-circle-info"></i> Auto-assigned by sync (this device is online and signed in) — overrides any number typed when creating the invoice.
                 </p>
               </div>
@@ -1441,7 +1632,7 @@
                 id="pvClientDetails"
                 rows="2"
                 oninput="renderInvoiceLivePreview()"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               ></textarea>
             </div>
             <div>
@@ -1452,7 +1643,7 @@
                 type="date"
                 id="pvDateIssued"
                 oninput="renderInvoiceLivePreview()"
-                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
               />
             </div>
 
@@ -1462,7 +1653,7 @@
                 id="pvIncludeSignature"
                 checked
                 onchange="updateInvoiceSignatureToggle(this.checked)"
-                class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                class="rounded border-slate-300 text-indigo-600 focus:ring-primary"
               />
               <label for="pvIncludeSignature" class="text-xs font-medium text-slate-700"
                 >Include signature on this invoice</label
@@ -1501,7 +1692,7 @@
                 <button
                   type="button"
                   onclick="addManualLineItem()"
-                  class="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold"
+                  class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
                 >
                   <i class="fa-solid fa-plus"></i> Add Line Item
                 </button>
@@ -1558,7 +1749,7 @@
               type="button"
               id="pvExportBtn"
               onclick="exportInvoiceToPDF()"
-              class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2"
+              class="w-full py-3 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2"
             >
               <i class="fa-solid fa-file-pdf"></i> Export PDF
             </button>
@@ -1613,7 +1804,7 @@
             id="fileDownloadBtn"
             download=""
             href="#"
-            class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2"
+            class="py-2 px-4 bg-primary hover:bg-primary/90 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2"
           >
             <i class="fa-solid fa-download"></i> Download File
           </a>

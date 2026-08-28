@@ -277,6 +277,33 @@ A locally-numbered invoice also gets `exported: false` at creation (a provisiona
 - `platform-electron/main.js` no longer registers any protocol or handles `second-instance`/`open-url`/`process.argv` deep-link URLs. **`app.requestSingleInstanceLock()` itself stays**, deliberately kept independent of the protocol use case that originally motivated it — it also independently guards against two instances writing to the same local `localStorage`/IndexedDB concurrently, the same class of bug as the tray-icon duplicate-instance incident (section 4H). `second-instance` is now a two-line handler that just focuses the existing window.
 - **Optional cleanup, not required**: the Supabase Dashboard's `worklogpro://auth/**` entry under Authentication → URL Configuration → Redirect URLs can be removed, but leaving it there is harmless — nothing will ever request it again.
 
+### M. Design System
+
+Established during the Phase 1 audit (`docs/ui-ux-audit/`) and implemented in the Phase 2/3 redesign pass — the full rationale and token-by-token reference lives in `docs/design-tokens.md`; this is the short version.
+
+**Color** — declared via a runtime `tailwind.config` script (Tailwind Play CDN supports this without a build step) in both shells' `<head>`, identical in each:
+
+```js
+tailwind.config = {
+  theme: { extend: { colors: {
+    primary: "#1E3A5F", secondary: "#2563EB",
+    accent: "#059669", destructive: "#DC2626",
+  } } },
+};
+```
+
+`background` (`#F8FAFC`)/`foreground` (`#0F172A`) aren't aliased — they're exact matches for stock `slate-50`/`slate-900`, already used that way. Same semantic mapping as before (primary = brand/buttons/links/focus rings, destructive = danger/delete, accent = positive/paid — this one already equaled stock `emerald-600`, secondary already equaled stock `blue-600`), only the underlying hex changed. **Known gap, deliberately not swept**: the header's dark-background accents (`bg-slate-900` header's icon square, project-switch link, live clock) are still legacy `indigo-*` — `primary` is itself a dark navy, so a mechanical swap there would badly hurt contrast against the dark header. Needs a deliberately chosen light accent, not attempted blind. Scattered `text-indigo-{500,600,700,800}`/`bg-indigo-{50,100}` link/badge instances elsewhere are also still legacy — real "primary" role, just not part of the audit's 5 high-severity fixes, left as a disclosed follow-up.
+
+**Typography** — Public Sans (replacing Inter), loaded the same way (Google Fonts `<link>` + `body { font-family }`). Only Tailwind's standard scale (`text-xs` through `text-3xl`) — every arbitrary `text-[Npx]` value has been collapsed to the nearest step (verify with `grep "text-\["` — should always be zero in both shells going forward; don't reintroduce one).
+
+**Spacing** — `p-6` card/section padding on desktop, `p-4` on mobile; `gap-3`/`space-y-3` for intra-card gaps; `gap-6`/`space-y-6` between distinct cards/sections. Match this for any new card or modal section rather than picking an arbitrary padding value.
+
+**Motion** — a shared `.modal-transition` class (defined once per shell's `<style>` block) gives every modal a 180ms fade+scale on open/close via `@starting-style` + `transition-behavior: allow-discrete`, animating the existing `hidden`↔`flex` class toggle with **zero JS changes** — `core/`'s toggle functions (`toggleManualEntryModal()`, `toggleExpenseModal()`, `openCreateInvoiceModal()`/`closeCreateInvoiceModal()`, `openInvoicePreview()`/`closeInvoicePreviewModal()`, `openProjectPicker()`/`closeProjectPicker()`, `openEditActiveBreakModal()`/`closeEditBreakModal()`) are completely unaware this exists. Any **new** modal should get the same `modal-transition` class on its root element rather than a one-off transition.
+
+**Mobile-only patterns worth knowing about, both scoped to `platform-web/index.html`'s own `<style>` block, not `core/`:**
+- `.safe-bottom-nav` (on `<main>`) reserves space for the fixed bottom tab bar — distinct from `.safe-bottom` (iOS home-indicator clearance only, used by the settings sheet).
+- `.stack-table`/`.stack-table-{logs,expenses,invoices}` transform the Logs/Expenses/Invoices tables into stacked cards below 640px width via CSS `nth-of-type` pseudo-labels — the underlying `<table>`/`<td>` markup rendered by `core/ui.js`/`core/invoicing.js` is completely unchanged and still renders as a normal table on desktop; only presentation differs here. Any new column added to one of these three tables needs a matching `nth-of-type` label rule added to this block, or it'll render unlabeled on mobile.
+
 ## 5. Rules for Claude Code
 
 1. **The graph now covers the real logic — use it.** Unlike the old single-file `index.html` (whose inline `<script>` graphify could never parse), `core/*.js` and `platform-electron/*.js` are real `.js` files that graphify's AST extractor **does** index. Query the graph first (`graphify query "<question>"` or `graphify-out/graph.json`) for questions about clock-in logic, invoicing, projects, persistence, etc. The deprecated `index.html` and `shell.html`'s markup are still not indexed, but that no longer matters — `shell.html` has no logic of its own (just `<script src>` tags and the `window.platformAdapter` shim), and `index.html` is unused.
