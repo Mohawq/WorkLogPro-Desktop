@@ -217,6 +217,39 @@ function applyShiftRow(row) {
     if (localProjectId) activeProjectId = localProjectId;
   } else {
     if (matchesCurrentShift) currentShift = null;
+
+    // Defense-in-depth against the orphaned-duplicate sync gap (see
+    // consolidateDailyLogs()'s cleanup at merge time — the primary fix,
+    // which stops this from happening going forward). This branch only
+    // matters for a row that predates that fix, or slips through some
+    // other race: logIdx === -1 means this syncId isn't tracked by any
+    // local record on its own, but if it's already listed inside some
+    // OTHER record's mergedSyncIds, its hours are already counted there
+    // — accepting it as a new entry would double-count them the next
+    // time consolidateDailyLogs() runs (confirmed via fresh reproduction:
+    // a genuine 3h+4h/7h total silently inflated to 11h after exactly
+    // this kind of re-pull). Re-push its deletion instead of adding it
+    // locally, so the server stops offering it up on future pulls too.
+    if (logIdx === -1) {
+      const alreadyAbsorbedBy = logs.find(
+        (l) =>
+          Array.isArray(l.mergedSyncIds) && l.mergedSyncIds.includes(row.id),
+      );
+      if (alreadyAbsorbedBy) {
+        enqueueSyncOp("shifts", {
+          syncId: row.id,
+          projectId: localProjectId,
+          startTimeISO: row.clock_in,
+          endTimeISO: row.clock_out,
+          breakMs: Number(row.total_break_ms) || 0,
+          notes: row.notes || "",
+          deletedAt: rowUpdated + 1,
+          updatedAt: rowUpdated + 1,
+        });
+        return;
+      }
+    }
+
     const clockInMs = getMsTimestamp(row.clock_in);
     const clockOutMs = getMsTimestamp(row.clock_out);
     const breakMs = Number(row.total_break_ms) || 0;

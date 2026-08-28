@@ -4,7 +4,7 @@
 // I/O (that's storage.js), no window.platformAdapter use.
 
       // State Variables
-      const SCHEMA_VERSION = 6; // v6 adds invoice paid/paidAt — see migrateV5ToV6()
+      const SCHEMA_VERSION = 7; // v7 adds logs[] mergedSyncIds — see migrateV6ToV7()
       const STORAGE_KEY = "wt_state";
       // Whether the user has made a first-run choice (sign in, or
       // explicitly "Continue without an account") on the sign-in-or-skip
@@ -241,6 +241,27 @@
           paid: inv.paid === true,
           paidAt: inv.paid === true ? inv.paidAt || null : null,
         }));
+      }
+
+      // v6 -> v7: logs[] mergedSyncIds — see consolidateDailyLogs()'s own
+      // comment (core/shift-tracking.js) for what this tracks and why. An
+      // existing already-merged record (sessionCount > 1) predates this
+      // field and genuinely doesn't know which raw sessions it absorbed —
+      // defaulting to just its own syncId is the safe, conservative
+      // choice: it can't create a false-positive "already absorbed"
+      // match against some unrelated pulled row, it just doesn't yet
+      // protect against a re-pull of THIS record's own already-orphaned
+      // sessions (those need the one-time data scan/cleanup this bug's
+      // fix also called for, not something a migration can reconstruct).
+      // A record that was never merged (sessionCount undefined/1) gets no
+      // field at all, matching how sessionCount itself is already only
+      // ever present on merged records.
+      function migrateV6ToV7() {
+        logs = logs.map((log) =>
+          log.sessionCount > 1
+            ? { ...log, mergedSyncIds: log.syncId ? [log.syncId] : [] }
+            : log,
+        );
       }
 
       // One-time upgrade path for data written before STORAGE_KEY existed (four

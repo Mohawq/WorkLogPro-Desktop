@@ -236,13 +236,36 @@
           // id/syncId (smallest numeric id) rather than group[0] — logs
           // gets unshift()ed on every clockOut/manual entry, so group[0]
           // here is whichever session was added most recently, not
-          // necessarily the one already reflected server-side. Note: if
-          // more than one session in this group had ALREADY independently
-          // synced before this merge (rare — requires two clock-outs on
-          // the same project+day with a sync cycle running between them),
-          // the other session(s)' server rows are left orphaned rather
-          // than cleaned up — a known gap, not attempted here.
+          // necessarily the one already reflected server-side.
           const canonical = group.reduce((a, b) => (a.id < b.id ? a : b));
+
+          // Every discarded (non-canonical) member that already had a
+          // syncId gets explicitly soft-deleted here — this used to be a
+          // documented known gap ("the other session(s)' server rows are
+          // left orphaned rather than cleaned up") that turned out to be
+          // an active, confirmed money-affecting bug, not just a cosmetic
+          // loose end: an orphaned row that's never deleted can get
+          // pulled back down on a LATER sync cycle (its syncId no longer
+          // matches anything in local logs[], so applyShiftRow() adds it
+          // as a brand-new entry), and the NEXT consolidateDailyLogs()
+          // pass silently sums its hours into this same group's total a
+          // second time — the exact mechanism confirmed via fresh
+          // reproduction (3h+4h genuine total inflating to 11h after one
+          // re-pull-and-remerge cycle). Explicitly deleting the discarded
+          // rows' server side here closes the loop at its source, instead
+          // of only guarding against the symptom downstream.
+          group.forEach((item) => {
+            if (item === canonical || !item.syncId) return;
+            item.deletedAt = getMsTimestamp();
+            stampAndSync("logs", item);
+            pendingDeletions.push({
+              table: "logs",
+              id: item.id,
+              deletedAt: item.deletedAt,
+              synced: false,
+              record: { ...item },
+            });
+          });
 
           const projectId = group[0].projectId;
           const fallbackRate = getProjectRate(projectId) || hourlyRate || 0;
@@ -252,8 +275,25 @@
           let totalNetMs = 0;
           let totalEarnings = 0;
           const notesArr = [];
+          // Every real session's syncId this merged record's total
+          // represents — a group member that's ITSELF a previous merge
+          // already carries its own mergedSyncIds, so that gets unioned
+          // in rather than just recording the nested merge's own syncId
+          // (which would silently forget which raw sessions it already
+          // absorbed). Consulted by applyShiftRow() (core/sync.js) to
+          // recognize a re-pulled orphan whose hours are already counted
+          // here, instead of quietly summing them in a second time.
+          const mergedSyncIds = [];
+          const addMergedSyncId = (sid) => {
+            if (sid && !mergedSyncIds.includes(sid)) mergedSyncIds.push(sid);
+          };
 
           group.forEach((item) => {
+            if (Array.isArray(item.mergedSyncIds) && item.mergedSyncIds.length > 0) {
+              item.mergedSyncIds.forEach(addMergedSyncId);
+            } else {
+              addMergedSyncId(item.syncId);
+            }
             const s = new Date(item.startTimeISO).getTime();
             const e = new Date(item.endTimeISO).getTime();
             // Number.isFinite() guards, not a bare comparison — NaN < x and
@@ -320,6 +360,7 @@
                 ? notesArr.join(" | ")
                 : `${group.length} shifts merged`,
             sessionCount: group.length,
+            mergedSyncIds,
           };
           // The merge itself changes what this record represents (totals,
           // session count), so it needs its own sync push — reuses

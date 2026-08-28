@@ -169,14 +169,30 @@
           const startObj = new Date(log.startTimeISO);
           const endObj = new Date(log.endTimeISO);
 
-          const startTimeStr = startObj.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          const endTimeStr = endObj.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
+          // A merged/assembled row's time range must never be able to
+          // silently contradict its own computed duration the way the
+          // original incident did — a bare time-of-day range (e.g.
+          // "12:52 PM - 11:58 PM") looks like a normal same-day ~11h
+          // window regardless of how many real calendar days actually
+          // fed into it. Whenever start and end land on different
+          // calendar days, show the date alongside each time instead of
+          // hiding that a multi-day span is involved.
+          const spansMultipleDays =
+            startObj.toDateString() !== endObj.toDateString();
+          const shortDate = (d) =>
+            d.toLocaleDateString([], { month: "numeric", day: "numeric" });
+          const startTimeStr =
+            (spansMultipleDays ? shortDate(startObj) + " " : "") +
+            startObj.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          const endTimeStr =
+            (spansMultipleDays ? shortDate(endObj) + " " : "") +
+            endObj.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
 
           const netMs = Number(log.netDurationMs) || 0;
           const netHours = (netMs / (1000 * 60 * 60)).toFixed(2);

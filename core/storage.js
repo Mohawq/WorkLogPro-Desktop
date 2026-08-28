@@ -277,6 +277,11 @@
               migrateV5ToV6();
             }
 
+            // v6 -> v7: logs[] mergedSyncIds (see migrateV6ToV7()).
+            if (storedVersion < 7) {
+              migrateV6ToV7();
+            }
+
             if (storedVersion < SCHEMA_VERSION) {
               persistState();
             }
