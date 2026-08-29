@@ -163,6 +163,13 @@ function shiftToParams(record) {
     p_created_at: isActive ? msToISO(record.startTime) : record.startTimeISO,
     p_updated_at: msToISO(record.updatedAt),
     p_deleted_at: record.deletedAt ? msToISO(record.deletedAt) : null,
+    // The rate a completed shift was actually billed at, preserved as its
+    // own column rather than re-derived from the project's rate at pull
+    // time (see applyShiftRow()'s comment for why that silently corrupted
+    // history whenever a rate ever changed). Not meaningful for an
+    // in-progress shift — clockOut() reuses this same syncId for the
+    // completed row, which pushes the real rate right after.
+    p_hourly_rate: isActive ? null : Number(record.hourlyRate) || 0,
   };
 }
 
@@ -262,7 +269,18 @@ function applyShiftRow(row) {
       endTimeISO: row.clock_out,
       breakMs,
       netDurationMs: Math.max(0, clockOutMs - clockInMs - breakMs),
-      hourlyRate: getProjectRate(localProjectId),
+      // Prefer the rate this specific shift was actually billed at
+      // (row.hourly_rate, now a real column) over the project's CURRENT
+      // rate — falling back to the latter only for a row pushed before
+      // this column existed (hourly_rate is null there). Unconditionally
+      // using getProjectRate() here used to silently overwrite a shift's
+      // true historical rate with whatever the project charges today on
+      // every single pull, corrupting already-correct local data the
+      // moment a project's rate ever changed and ANY row synced again.
+      hourlyRate:
+        row.hourly_rate != null
+          ? Number(row.hourly_rate)
+          : getProjectRate(localProjectId),
       notes: row.notes || "",
       updatedAt: rowUpdated,
     };
