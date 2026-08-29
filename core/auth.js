@@ -301,6 +301,14 @@ async function handlePasswordAuthSubmit(event) {
   }
 }
 
+// A user-initiated click gets a much more generous bound than
+// STARTUP_SYNC_TIMEOUT_MS (core/sync.js) — that one exists so app launch
+// is never blocked waiting on the network, and 4s is fine for a "proceed
+// with local data regardless" background attempt. Here the user is
+// actively watching the button, so it needs to tolerate a genuinely slow
+// (not dead) connection rather than flip back to "Sync Now" prematurely.
+const SYNC_NOW_BUTTON_TIMEOUT_MS = 20000;
+
 async function handleSyncNowClick() {
   const btn = document.getElementById("authSyncNowBtn");
   const originalLabel = btn ? btn.innerHTML : "";
@@ -309,7 +317,21 @@ async function handleSyncNowClick() {
     btn.innerHTML = "Syncing...";
   }
   try {
-    await runSyncCycle();
+    // runSyncCycle() already swallows its own errors (see its try/catch)
+    // and never rejects, but it can still hang indefinitely if the
+    // underlying fetch never settles at all (dropped connection, a
+    // backgrounded tab/app, the device sleeping mid-request) — Promise
+    // rejection and Promise never-resolving are different failure modes,
+    // and only the first one was handled before. Without this bound, an
+    // unresolved await here left the button permanently disabled: a
+    // disabled button fires no click event at all, so every subsequent
+    // real click produced zero effect, zero console output, and zero
+    // network activity — exactly the reported symptom — with no recovery
+    // short of a full app reload. withTimeout() just stops the button
+    // from waiting on it; the original call (if it was ever going to
+    // finish) keeps running in the background and still applies its
+    // results normally, same as the startup-sync usage of this helper.
+    await withTimeout(() => runSyncCycle(), SYNC_NOW_BUTTON_TIMEOUT_MS);
   } finally {
     renderLastSyncedText();
     if (btn) {

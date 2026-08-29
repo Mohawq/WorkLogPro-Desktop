@@ -9,12 +9,14 @@
 // files will still load, but nothing here queues writes or syncs data;
 // that's future Supabase-backed work, out of scope for this pass.
 
-// Bumped to v3 because SHELL_ASSETS changed again (added mobile-nav.js for
-// the tab bar / settings sheet) — same reasoning as the v1->v2 bump above:
-// the activate handler only evicts caches that DON'T match CACHE_NAME, so a
-// same-named cache would never pick up the new file for anyone who'd
-// already installed the previous worker.
-const CACHE_NAME = "worklogpro-shell-v3";
+// Bumped to v4 because index.html itself changed substantially (the
+// Phase 1-3 UI/UX redesign — Cloud Sync promoted to its own card, Shift
+// Settings split into sections, stacked mobile tables, etc.) — this is
+// cache-first (see the fetch handler below), so a same-named cache would
+// have kept serving the pre-redesign index.html to already-installed
+// PWAs indefinitely, exactly the failure mode the v1->v2/v2->v3 bumps
+// above were already guarding against.
+const CACHE_NAME = "worklogpro-shell-v4";
 
 // Paths are relative to this file's own location (platform-web/), matching
 // how index.html references core/*.js.
