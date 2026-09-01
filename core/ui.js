@@ -636,6 +636,20 @@
             paidInvoicesTotal += Number(inv.total) || 0;
           });
         const outstandingPayout = grandTotalPayout - paidInvoicesTotal;
+        // Clamped to zero rather than shown negative — a small negative
+        // value here only ever means residual rounding drift (e.g. an
+        // older invoice created before invoice totals and this stat were
+        // made to agree to the cent) or every dollar of this project
+        // already paid off; a freelancer's outstanding balance can't
+        // meaningfully go negative from normal use, so display would look
+        // broken rather than informative. The real fix is keeping the two
+        // calculations in agreement in the first place (see
+        // handleCreateInvoiceSubmit()'s workItems.hours comment) — this is
+        // just a display-level safety net on top of that.
+        const displayedOutstanding = Math.max(
+          0,
+          isNaN(outstandingPayout) ? 0 : outstandingPayout,
+        );
 
         document.getElementById("statWorkedHours").textContent =
           `${isNaN(totalWorkedHours) ? "0.00" : totalWorkedHours} hrs`;
@@ -644,7 +658,7 @@
         document.getElementById("statExpenses").textContent =
           `$${(isNaN(totalExpenses) ? 0 : totalExpenses).toFixed(2)}`;
         document.getElementById("statTotalPayout").textContent =
-          `$${(isNaN(outstandingPayout) ? 0 : outstandingPayout).toFixed(2)}`;
+          `$${displayedOutstanding.toFixed(2)}`;
       }
 
       function formatMs(ms, includeHours = true) {

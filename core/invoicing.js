@@ -385,12 +385,17 @@
             sourceLogId: log.id,
             date: log.date || "",
             description: log.notes || "Normal Shift",
-            hours: parseFloat(
-              (
-                (Number(log.netDurationMs) || 0) /
-                (1000 * 60 * 60)
-              ).toFixed(2),
-            ),
+            // Kept at full precision, NOT rounded to 2 decimals here — this
+            // value feeds every downstream total (computeInvoiceTotals(),
+            // buildInvoiceSnapshot()'s amount, the editor's live amount
+            // column), and rounding it this early is exactly what caused
+            // invoice totals to drift a cent or two from renderStats()'s
+            // "Total Payout Due" (which sums raw hours × rate and rounds
+            // only the final total). Display-time rounding happens
+            // separately, in renderInvoiceEditor()'s input value and
+            // generateInvoiceHTML()'s .toFixed(2) — this field itself
+            // stays precise so the two totals agree to the cent.
+            hours: (Number(log.netDurationMs) || 0) / (1000 * 60 * 60),
             rate: Number(log.hourlyRate) || getActiveRate(),
           }));
 
@@ -740,7 +745,7 @@
               <tr>
                 <td class="px-2 py-1.5"><input type="text" value="${escapeHtml(item.date)}" oninput="updateWorkItem('${item.id}','date',this.value)" class="w-24 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
                 <td class="px-2 py-1.5"><input type="text" value="${escapeHtml(item.description)}" oninput="updateWorkItem('${item.id}','description',this.value)" class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
-                <td class="px-2 py-1.5"><input type="number" step="0.01" min="0" value="${item.hours}" oninput="updateWorkItem('${item.id}','hours',this.value)" class="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
+                <td class="px-2 py-1.5"><input type="number" step="0.01" min="0" value="${(Number(item.hours) || 0).toFixed(2)}" oninput="updateWorkItem('${item.id}','hours',this.value)" class="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
                 <td class="px-2 py-1.5"><input type="number" step="0.01" min="0" value="${item.rate}" oninput="updateWorkItem('${item.id}','rate',this.value)" class="w-16 text-xs border border-slate-200 rounded-lg px-2 py-1" /></td>
                 <td class="px-2 py-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap">$${amount}</td>
                 <td class="px-2 py-1.5 text-right"><button type="button" onclick="removeWorkItem('${item.id}')" class="text-slate-400 hover:text-rose-600"><i class="fa-solid fa-xmark"></i></button></td>
