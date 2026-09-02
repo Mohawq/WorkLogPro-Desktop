@@ -1,0 +1,125 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gray-on-color",
+        "value": "text-slate-400",
+        "files": [
+          "core/projects.js"
+        ],
+        "createdAt": "2026-08-24T14:22:05.486Z",
+        "reason": "false positive: resting-state gray text on transparent bg; hover changes bg AND text together (hover:bg-rose-50 + hover:text-rose-600), never gray-on-color simultaneously"
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "text-slate-400",
+        "files": [
+          "platform-electron/shell.html"
+        ],
+        "createdAt": "2026-08-24T14:50:04.734Z",
+        "reason": "false positive: text-slate-400 only appears alongside disabled:bg-slate-200/100 (paired disabled-state gray-on-gray), never simultaneously with the colored bg-* classes on the same element"
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "text-slate-500",
+        "files": [
+          "platform-electron/shell.html"
+        ],
+        "createdAt": "2026-08-24T14:50:33.110Z",
+        "reason": "false positive: disabled:text-slate-500 on the Switch Project button is an intentional dimmed/disabled state (WCAG exempts disabled controls from contrast requirements); background is the dark slate-800 header badge, not a saturated brand color"
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "text-slate-400",
+        "files": [
+          "platform-web/index.html"
+        ],
+        "createdAt": "2026-08-24T14:50:57.194Z",
+        "reason": "false positive: text-slate-400 only appears alongside a paired disabled:bg-slate-100/200 (disabled-state gray-on-gray), never simultaneously with the colored bg-* classes on the same element"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "platform-electron/shell.html"
+        ],
+        "createdAt": "2026-08-24T15:10:38.427Z",
+        "reason": "pre-existing app-wide font choice, predates this session's overnight-shift form change, out of scope"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "platform-web/index.html"
+        ],
+        "createdAt": "2026-08-24T15:10:38.569Z",
+        "reason": "pre-existing app-wide font choice, predates this session's overnight-shift form change, out of scope"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "text-indigo-400",
+        "files": [
+          "platform-electron/shell.html"
+        ],
+        "createdAt": "2026-08-24T15:10:38.733Z",
+        "reason": "pre-existing app-wide indigo accent color (header icon, sync indicator, etc.), predates this session, out of scope for an overnight-shift form fix"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "text-indigo-400",
+        "files": [
+          "platform-web/index.html"
+        ],
+        "createdAt": "2026-08-24T15:10:38.845Z",
+        "reason": "pre-existing app-wide indigo accent color, predates this session, out of scope for an overnight-shift form fix"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "text-indigo-400",
+        "files": [
+          "core/ui.js"
+        ],
+        "createdAt": "2026-08-24T15:10:38.965Z",
+        "reason": "pre-existing app-wide indigo accent color (file-preview fallback icon), predates this session, out of scope for an overnight-shift form fix"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "text-purple-600",
+        "files": [
+          "platform-electron/shell.html"
+        ],
+        "createdAt": "2026-08-24T15:18:20.703Z",
+        "reason": "pre-existing app-wide stat-tile color coding (Expenses/Bills tile), predates this session, not a gradient or cyan-on-dark, out of scope"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "text-indigo-700",
+        "files": [
+          "platform-electron/shell.html"
+        ],
+        "createdAt": "2026-08-24T15:18:20.821Z",
+        "reason": "pre-existing app-wide stat-tile color coding (Total Payout Due tile), predates this session, out of scope"
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "text-slate-600",
+        "files": [
+          "platform-electron/shell.html"
+        ],
+        "createdAt": "2026-08-28T15:16:09.582Z",
+        "reason": "false positive: text-slate-600 is the file input's own body text on a white/transparent background; the file:bg-indigo-50/file:text-indigo-700 classes nearby style the picker-button pseudo-element separately (dark text on light bg, fine contrast) - detector conflated the two"
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "text-slate-600",
+        "files": [
+          "platform-web/index.html"
+        ],
+        "createdAt": "2026-08-28T15:16:23.048Z",
+        "reason": "false positive: text-slate-600 is the file input's own body text on a white/transparent background; the file:bg-indigo-50/file:text-indigo-700 classes nearby style the picker-button pseudo-element separately (dark text on light bg, fine contrast) - detector conflated the two"
+      }
+    ]
+  }
+}

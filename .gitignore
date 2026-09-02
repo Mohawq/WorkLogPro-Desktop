@@ -13,5 +13,9 @@ out/
 # graphify
 graphify-out/
 
+# impeccable design-hook cache — regenerated locally, config.json (the
+# curated ignore-rules) is the part worth tracking, not this
+.impeccable/hook.cache.json
+
 #.vs 
 .vs/
