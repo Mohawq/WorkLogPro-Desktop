@@ -1220,7 +1220,19 @@
           // Preserve the existing syncId so this push updates the same
           // server row rather than stampAndSync minting a fresh one below.
           record.syncId = invoices[existingIdx].syncId;
+          // Changing the number is exactly how a user is meant to resolve
+          // a flagged conflict (see CLAUDE.md's syncConflicts section) —
+          // capture the prior number before it's overwritten below so
+          // that can be detected and the notification cleared once they
+          // do, rather than it lingering until some other cleanup path.
+          const priorNumber = invoices[existingIdx].invoiceNumber;
           invoices[existingIdx] = record;
+          if (
+            record.invoiceNumber !== priorNumber &&
+            hasSyncConflict("invoices", record.id)
+          ) {
+            clearSyncConflict("invoices", record.id);
+          }
         } else {
           invoices.unshift(record);
           invoiceDraft.savedInvoiceId = record.id;
@@ -1381,6 +1393,11 @@
         if (record) {
           record.deletedAt = getMsTimestamp();
           stampAndSync("invoices", record);
+          // Deleting a conflicting invoice is a valid way to resolve it —
+          // without this, its syncConflicts entry would outlive the
+          // record it refers to, showing up as a permanent "An invoice
+          // (no longer in your local history)" ghost in Settings.
+          clearSyncConflict("invoices", id);
           // Full snapshot (post-stampAndSync, so syncId/updatedAt/deletedAt
           // are all already set) — not just {table, id, deletedAt}. Needed
           // so reconcileLocalWithServer() (core/sync.js) can rebuild and

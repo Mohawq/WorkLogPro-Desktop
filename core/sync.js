@@ -549,6 +549,27 @@ async function reconcileInvoiceNumberIfNeeded(client, op) {
   persistState();
 }
 
+// A syncConflicts entry is a terminal, manually-resolved state (see
+// pushOneOp()'s A3 comment below) — these two helpers are the single
+// source of truth for checking/clearing one, used both to stop
+// re-enqueueing a known-conflicting invoice (reconcileLocalWithServer())
+// and to dedupe the notification itself (pushOneOp()), rather than each
+// call site re-deriving the same `table`+`id` match separately.
+function hasSyncConflict(table, id) {
+  return syncConflicts.some((c) => c.table === table && c.id === id);
+}
+
+function clearSyncConflict(table, id) {
+  const before = syncConflicts.length;
+  syncConflicts = syncConflicts.filter(
+    (c) => !(c.table === table && c.id === id),
+  );
+  if (syncConflicts.length !== before) {
+    persistState();
+    if (typeof renderSyncConflicts === "function") renderSyncConflicts();
+  }
+}
+
 async function pushOneOp(client, op) {
   const { table, record } = op;
 
@@ -602,13 +623,19 @@ async function pushOneOp(client, op) {
     // here, so a 23505 past that point means the number was already
     // handed to a client and must never be silently changed or retried.
     if (table === "invoices" && error.code === "23505") {
-      syncConflicts.push({
-        table: "invoices",
-        id: record.id,
-        detectedAt: getMsTimestamp(),
-      });
-      persistState();
-      if (typeof renderSyncConflicts === "function") renderSyncConflicts();
+      // Dedup: this same 23505 can legitimately be re-hit (e.g. the user
+      // manually re-triggers a push some other way while the conflict is
+      // still unresolved) without it being a new distinct conflict —
+      // don't append a second notification for the same invoice.
+      if (!hasSyncConflict("invoices", record.id)) {
+        syncConflicts.push({
+          table: "invoices",
+          id: record.id,
+          detectedAt: getMsTimestamp(),
+        });
+        persistState();
+        if (typeof renderSyncConflicts === "function") renderSyncConflicts();
+      }
       return "conflict"; // caller removes the op from the queue; record itself is left untouched
     }
     throw error;
@@ -756,6 +783,20 @@ async function reconcileLocalWithServer() {
 
       localArray.forEach((record) => {
         if (!record.syncId) return; // nothing to key a push on — shouldn't happen post-v4-migration, but a missing syncId here would just throw deep inside toParams()
+        // A record with an existing, unresolved sync conflict is a known,
+        // permanent divergence (see pushOneOp()'s A3 comment) — its own
+        // insert was rejected by the unique invoice-number constraint, so
+        // it never got a server-side row under its own id and will always
+        // look "missing from server" to the check below. Without this
+        // guard, every reconcileLocalWithServer() run — which includes
+        // every app launch with an already-active session, not just a
+        // fresh sign-in — would re-enqueue it, re-push it, hit the same
+        // 23505 again, and (before pushOneOp()'s dedup) append another
+        // syncConflicts entry. This is what actually produced the 40+
+        // duplicate notifications for a single real conflict.
+        if (table === "invoices" && hasSyncConflict("invoices", record.id)) {
+          return;
+        }
         const remoteUpdated = remoteMap.get(record.syncId);
         const localUpdated = record.updatedAt || 0;
         if (remoteUpdated === undefined || localUpdated > remoteUpdated) {
